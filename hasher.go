@@ -69,26 +69,25 @@ func updateBufferSize(bufferSize int64) int64 {
 }
 
 type Hasher struct {
-	hashes     map[string]hash.Hash
-	w          io.Writer
+	hashFuncs  []string
 	bufferSize int64
 }
 
-func New(hashFuncs []string, bufferSize int64) (*Hasher, error) {
+func getHashesAndWriter(hashFuncs []string) (map[string]hash.Hash, io.Writer, error) {
 	var (
 		hashes  = make(map[string]hash.Hash)
 		writers []io.Writer
 	)
 
 	if hashFuncs == nil || len(hashFuncs) == 0 {
-		return nil, ErrNoHashFunc
+		return nil, nil, ErrNoHashFunc
 	}
 
 	// Get hash.Hash from hash func name.
 	for _, name := range hashFuncs {
 		hash, err := GetHashByName(name)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		hashes[name] = hash
@@ -97,32 +96,33 @@ func New(hashFuncs []string, bufferSize int64) (*Hasher, error) {
 
 	w := io.MultiWriter(writers...)
 
-	hasher := &Hasher{
-		hashes:     hashes,
-		w:          w,
-		bufferSize: updateBufferSize(bufferSize),
-	}
-
-	return hasher, nil
+	return hashes, w, nil
 }
 
-func (h *Hasher) loadStates(states map[string][]byte) error {
+func New(hashFuncs []string, bufferSize int64) *Hasher {
+	return &Hasher{
+		hashFuncs:  hashFuncs,
+		bufferSize: updateBufferSize(bufferSize),
+	}
+}
+
+func loadStates(hashes map[string]hash.Hash, states map[string][]byte) error {
 	if states == nil {
 		return nil
 	}
 
-	if len(h.hashes) != len(states) {
+	if len(hashes) != len(states) {
 		return ErrUnmatchedHashFuncsAndStates
 	}
 
-	for name := range h.hashes {
+	for name := range hashes {
 		if _, ok := states[name]; !ok {
 			return ErrUnmatchedHashFuncsAndStates
 		}
 	}
 
 	// Load states
-	for name, hash := range h.hashes {
+	for name, hash := range hashes {
 		// Convert hash to encoding.BinaryUnmarshaler
 		u, ok := hash.(encoding.BinaryUnmarshaler)
 		if !ok {
@@ -137,10 +137,10 @@ func (h *Hasher) loadStates(states map[string][]byte) error {
 	return nil
 }
 
-func (h *Hasher) states() (map[string][]byte, error) {
+func outputStates(hashes map[string]hash.Hash) (map[string][]byte, error) {
 	states := make(map[string][]byte)
 
-	for name, hash := range h.hashes {
+	for name, hash := range hashes {
 		// Convert hash to encoding.BinaryMarshaler
 		u, ok := hash.(encoding.BinaryMarshaler)
 		if !ok {
@@ -175,8 +175,15 @@ func (h *Hasher) Start(
 			ticker *time.Ticker = nil
 		)
 
+		// Get hashes and multiple writer.
+		hashes, w, err := getHashesAndWriter(h.hashFuncs)
+		if err != nil {
+			ch <- newErrorEvent(err)
+			return
+		}
+
 		if states != nil {
-			if err := h.loadStates(states); err != nil {
+			if err := loadStates(hashes, states); err != nil {
 				ch <- newErrorEvent(err)
 				return
 			}
@@ -201,7 +208,7 @@ func (h *Hasher) Start(
 
 			select {
 			case <-ctx.Done():
-				states, err := h.states()
+				states, err := outputStates(hashes)
 				if err != nil {
 					ch <- newErrorEvent(err)
 					return
@@ -209,7 +216,7 @@ func (h *Hasher) Start(
 				ch <- newStopEvent(computed, states)
 				return
 			default:
-				n, err := io.CopyBuffer(h.w, r, buf)
+				n, err := io.CopyBuffer(w, r, buf)
 				if err != nil {
 					ch <- newErrorEvent(err)
 					return
@@ -218,7 +225,7 @@ func (h *Hasher) Start(
 				if n == 0 {
 					checksums := make(map[string][]byte)
 
-					for name, hash := range h.hashes {
+					for name, hash := range hashes {
 						checksums[name] = hash.Sum(nil)
 					}
 

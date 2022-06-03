@@ -15,11 +15,7 @@ func ExampleHasher_Start() {
 	}
 	bufferSize := int64(16 * 1024 * 1024)
 
-	h, err := hasher.New(hashFuncs, bufferSize)
-	if err != nil {
-		log.Printf("new hasher error: %v", err)
-		return
-	}
+	h := hasher.New(hashFuncs, bufferSize)
 
 	str := "Hello World!"
 	ctx := context.Background()
