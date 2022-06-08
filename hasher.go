@@ -11,7 +11,7 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
-	"time"
+	"log"
 )
 
 const (
@@ -157,11 +157,19 @@ func outputStates(hashes map[string]hash.Hash) (map[string][]byte, error) {
 	return states, nil
 }
 
+// ComputePercent computes the progress percent.
+func ComputePercent(total, current int64) float32 {
+	if total > 0 {
+		return float32(float64(current) / (float64(total) / float64(100)))
+	}
+	return 0
+}
+
 func (h *Hasher) Start(
 	ctx context.Context,
 	r io.Reader,
+	total int64,
 	states map[string][]byte,
-	reportComputedInterval time.Duration,
 ) <-chan Event {
 	ch := make(chan Event)
 
@@ -171,7 +179,7 @@ func (h *Hasher) Start(
 		}()
 
 		var (
-			ticker *time.Ticker = nil
+			percent, oldPercent float32
 		)
 
 		// Get hashes and multiple writer.
@@ -189,22 +197,9 @@ func (h *Hasher) Start(
 		}
 
 		computed := int64(0)
-
 		buf := make([]byte, h.bufferSize)
 
-		if reportComputedInterval > 0 {
-			ticker = time.NewTicker(reportComputedInterval)
-		}
-
 		for {
-			if ticker != nil {
-				select {
-				case <-ticker.C:
-					ch <- newComputedEvent(computed)
-				default:
-				}
-			}
-
 			select {
 			case <-ctx.Done():
 				states, err := outputStates(hashes)
@@ -215,8 +210,8 @@ func (h *Hasher) Start(
 				ch <- newStopEvent(computed, states)
 				return
 			default:
-				n, err := io.CopyBuffer(w, r, buf)
-				if err != nil {
+				n, err := r.Read(buf)
+				if err != nil && err != io.EOF {
 					ch <- newErrorEvent(err)
 					return
 				}
@@ -230,12 +225,25 @@ func (h *Hasher) Start(
 
 					ch <- newOKEvent(computed, checksums)
 					return
+				} else {
+					if n, err = w.Write(buf[:n]); err != nil {
+						ch <- newErrorEvent(err)
+						return
+					}
 				}
 
-				computed += n
+				computed += int64(n)
 
+				log.Printf("computed: %v", computed)
+				if total > 0 {
+					percent = ComputePercent(total, computed)
+					log.Printf("percent: %v", percent)
+					if percent != oldPercent {
+						oldPercent = percent
+						ch <- newProgressEvent(total, computed, percent)
+					}
+				}
 			}
-
 		}
 	}(ch)
 

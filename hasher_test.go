@@ -3,6 +3,7 @@ package hasher_test
 import (
 	"context"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/northbright/hasher"
@@ -20,7 +21,7 @@ func ExampleHasher_Start() {
 	str := "Hello World!"
 	ctx := context.Background()
 	// Start computing the hash of the string.
-	ch := h.Start(ctx, strings.NewReader(str), nil, 0)
+	ch := h.Start(ctx, strings.NewReader(str), 0, nil)
 
 	for event := range ch {
 		switch ev := event.(type) {
@@ -29,6 +30,34 @@ func ExampleHasher_Start() {
 			return
 		case *hasher.ComputedEvent:
 			log.Printf("on computed: %v", ev.Computed())
+		case *hasher.StopEvent:
+			log.Printf("on stopped:\ncomputed: %v, states: %v", ev.Computed(), ev.States())
+		case *hasher.OKEvent:
+			log.Printf("on ok:\ncomputed: %v\nchecksums:\n", ev.Computed())
+			for name, checksum := range ev.Checksums() {
+				log.Printf("%s: %X", name, checksum)
+			}
+		}
+	}
+
+	name := "/Users/xxu/Iso/CentOS-8.1.1911-x86_64-dvd1.iso"
+	fi, _ := os.Stat(name)
+	size := fi.Size()
+	log.Printf("size: %v", size)
+	f, _ := os.Open(name)
+	defer f.Close()
+
+	ch = h.Start(ctx, f, fi.Size(), nil)
+
+	for event := range ch {
+		switch ev := event.(type) {
+		case *hasher.ErrorEvent:
+			log.Printf("on error: %v", ev.Err())
+			return
+		case *hasher.ComputedEvent:
+			log.Printf("on computed: %v", ev.Computed())
+		case *hasher.ProgressEvent:
+			log.Printf("on progress: %v", ev.Percent())
 		case *hasher.StopEvent:
 			log.Printf("on stopped:\ncomputed: %v, states: %v", ev.Computed(), ev.States())
 		case *hasher.OKEvent:

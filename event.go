@@ -44,6 +44,29 @@ func (ev *ComputedEvent) Computed() int64 {
 	return ev.computed
 }
 
+type ProgressEvent struct {
+	*event
+	total   int64
+	current int64
+	percent float32
+}
+
+func newProgressEvent(total int64, current int64, percent float32) *ProgressEvent {
+	return &ProgressEvent{event: newEvent(), total: total, current: current, percent: percent}
+}
+
+func (ev *ProgressEvent) Total() int64 {
+	return ev.total
+}
+
+func (ev *ProgressEvent) Current() int64 {
+	return ev.current
+}
+
+func (ev *ProgressEvent) Percent() float32 {
+	return ev.percent
+}
+
 type StopEvent struct {
 	*ComputedEvent
 	states map[string][]byte
