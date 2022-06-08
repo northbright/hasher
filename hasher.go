@@ -26,17 +26,16 @@ var (
 	ErrNotBinaryMarshaler          = errors.New("encoding.BinaryMarshaler not implemented")
 	ErrUnSupportedHashFunc         = errors.New("unsupported hash function")
 	ErrUnmatchedStringLenAndOffset = errors.New("unmatched string length and offset")
-	AvailableHashFuncs             = []string{
+)
+
+func AvailableHashFuncs() []string {
+	return []string{
 		"MD5",
 		"CRC-32",
 		"SHA-1",
 		"SHA-256",
 		"SHA-512",
 	}
-)
-
-func GetAvailableHashFuncs() []string {
-	return AvailableHashFuncs
 }
 
 func GetHashByName(name string) (hash.Hash, error) {
