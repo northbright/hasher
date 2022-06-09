@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/northbright/hasher"
 )
@@ -21,7 +22,7 @@ func ExampleHasher_Start() {
 	str := "Hello World!"
 	ctx := context.Background()
 	// Start computing the hash of the string.
-	ch := h.Start(ctx, strings.NewReader(str), 0, nil)
+	ch := h.Start(ctx, strings.NewReader(str), 0, 0, nil)
 
 	for event := range ch {
 		switch ev := event.(type) {
@@ -47,7 +48,7 @@ func ExampleHasher_Start() {
 	f, _ := os.Open(name)
 	defer f.Close()
 
-	ch = h.Start(ctx, f, fi.Size(), nil)
+	ch = h.Start(ctx, f, fi.Size(), time.Millisecond*800, nil)
 
 	for event := range ch {
 		switch ev := event.(type) {

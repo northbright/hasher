@@ -12,6 +12,7 @@ import (
 	"hash/crc32"
 	"io"
 	"log"
+	"time"
 )
 
 const (
@@ -26,6 +27,7 @@ var (
 	ErrNotBinaryMarshaler          = errors.New("encoding.BinaryMarshaler not implemented")
 	ErrUnSupportedHashFunc         = errors.New("unsupported hash function")
 	ErrUnmatchedStringLenAndOffset = errors.New("unmatched string length and offset")
+	DefReportProgressInterval      = time.Millisecond * 500
 )
 
 func AvailableHashFuncs() []string {
@@ -169,18 +171,23 @@ func (h *Hasher) Start(
 	ctx context.Context,
 	r io.Reader,
 	total int64,
+	reportProgressInterval time.Duration,
 	states map[string][]byte,
 ) <-chan Event {
 	ch := make(chan Event)
 
 	go func(ch chan Event) {
-		defer func() {
-			close(ch)
-		}()
-
 		var (
+			ticker              *time.Ticker = nil
 			percent, oldPercent float32
 		)
+
+		defer func() {
+			close(ch)
+			if ticker != nil {
+				ticker.Stop()
+			}
+		}()
 
 		// Get hashes and multiple writer.
 		hashes, w, err := getHashesAndWriter(h.hashFuncs)
@@ -199,8 +206,28 @@ func (h *Hasher) Start(
 		computed := int64(0)
 		buf := make([]byte, h.bufferSize)
 
+		if reportProgressInterval <= 0 {
+			reportProgressInterval = DefReportProgressInterval
+		}
+
+		ticker = time.NewTicker(reportProgressInterval)
+		if total <= 0 {
+			ticker.Stop()
+		}
+
 		for {
 			select {
+			case t := <-ticker.C:
+				log.Printf("ticker: t: %v", t)
+				if total > 0 {
+					percent = ComputePercent(total, computed)
+					log.Printf("percent: %v", percent)
+					if percent != oldPercent {
+						oldPercent = percent
+						ch <- newProgressEvent(total, computed, percent)
+					}
+				}
+
 			case <-ctx.Done():
 				states, err := outputStates(hashes)
 				if err != nil {
@@ -233,16 +260,6 @@ func (h *Hasher) Start(
 				}
 
 				computed += int64(n)
-
-				log.Printf("computed: %v", computed)
-				if total > 0 {
-					percent = ComputePercent(total, computed)
-					log.Printf("percent: %v", percent)
-					if percent != oldPercent {
-						oldPercent = percent
-						ch <- newProgressEvent(total, computed, percent)
-					}
-				}
 			}
 		}
 	}(ch)
