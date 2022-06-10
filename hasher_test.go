@@ -29,8 +29,6 @@ func ExampleHasher_Start() {
 		case *hasher.ErrorEvent:
 			log.Printf("on error: %v", ev.Err())
 			return
-		case *hasher.ComputedEvent:
-			log.Printf("on computed: %v", ev.Computed())
 		case *hasher.StopEvent:
 			log.Printf("on stopped:\ncomputed: %v, states: %v", ev.Computed(), ev.States())
 		case *hasher.OKEvent:
@@ -55,8 +53,6 @@ func ExampleHasher_Start() {
 		case *hasher.ErrorEvent:
 			log.Printf("on error: %v", ev.Err())
 			return
-		case *hasher.ComputedEvent:
-			log.Printf("on computed: %v", ev.Computed())
 		case *hasher.ProgressEvent:
 			log.Printf("on progress: %v", ev.Percent())
 		case *hasher.StopEvent:

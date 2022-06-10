@@ -31,16 +31,16 @@ func (ev *ErrorEvent) Err() error {
 	return ev.e
 }
 
-type ComputedEvent struct {
+type computedEvent struct {
 	*event
 	computed int64
 }
 
-func newComputedEvent(computed int64) *ComputedEvent {
-	return &ComputedEvent{event: newEvent(), computed: computed}
+func newComputedEvent(computed int64) *computedEvent {
+	return &computedEvent{event: newEvent(), computed: computed}
 }
 
-func (ev *ComputedEvent) Computed() int64 {
+func (ev *computedEvent) Computed() int64 {
 	return ev.computed
 }
 
@@ -68,13 +68,13 @@ func (ev *ProgressEvent) Percent() float32 {
 }
 
 type StopEvent struct {
-	*ComputedEvent
+	*computedEvent
 	states map[string][]byte
 }
 
 func newStopEvent(computed int64, states map[string][]byte) *StopEvent {
 	return &StopEvent{
-		ComputedEvent: newComputedEvent(computed),
+		computedEvent: newComputedEvent(computed),
 		states:        states,
 	}
 }
@@ -84,13 +84,13 @@ func (ev *StopEvent) States() map[string][]byte {
 }
 
 type OKEvent struct {
-	*ComputedEvent
+	*computedEvent
 	checksums map[string][]byte
 }
 
 func newOKEvent(computed int64, checksums map[string][]byte) *OKEvent {
 	return &OKEvent{
-		ComputedEvent: newComputedEvent(computed),
+		computedEvent: newComputedEvent(computed),
 		checksums:     checksums,
 	}
 }
