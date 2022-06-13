@@ -1,19 +1,41 @@
-# Ignore all
+# Ignore All
 *
-# Unignore all sub dirs
+# Unignore All Sub dirs
 !*/
+
+# Unignore Files
+# --------------------------
+
+# gitignore itself
 !.gitignore
+
+# License Files
 !LICENSE
+
+# Markdown Files
 !*.md
+
+# Text Files
+!*.txt
+
+# Shell Files
+!*.sh
+
+# Golang Files
 !*.go
 !go.mod
 !go.sum
+
+# Configuration Files
 !*.json
 !*.yml
 !*.yaml
-!*.pem
 config.json
-# For HTML
+
+# Cert Files
+!*.pem
+
+# HTML Files
 !*.html
 !*.js
 !*.css
