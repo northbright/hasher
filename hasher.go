@@ -195,13 +195,16 @@ func ComputePercent(total, current int64) float32 {
 	return 0
 }
 
-// Start returns a Event channel to receive events and starts a goroutine to compute hashes.
+// Start returns an event channel to receive events and starts a goroutine to compute hashes.
 // ctx: context.Context.
 // r: io.Reader to read the data from.
 // total: total size to read and compute hashes.
 // reportProgressInterval: interval to report the progress of computing hashes.
 // It will be set to DefReportProgressInterval if it's 0.
 // states: a map contains the states(key: hash function name, value: state in byte slice)
+//
+// It provides caller an event channel to receive events.
+// The channel is closed automatically when the goroutine exits(an error occurs, user cancels, computing hash checksums is done).
 func (h *Hasher) Start(
 	ctx context.Context,
 	r io.Reader,
