@@ -21,6 +21,8 @@ const (
 )
 
 var (
+	Debug = false
+
 	ErrNoHashFunc                  = errors.New("no hash function specified")
 	ErrUnmatchedHashFuncsAndStates = errors.New("unmatched hash functions and states")
 	ErrNotBinaryUnmarshaler        = errors.New("encoding.BinaryUnmarshaler not implemented")
@@ -218,10 +220,16 @@ func (h *Hasher) Start(
 		for {
 			select {
 			case t := <-ticker.C:
-				log.Printf("ticker: t: %v", t)
+				if Debug == true {
+					log.Printf("ticker: t: %v", t)
+				}
+
 				if total > 0 {
 					percent = ComputePercent(total, computed)
-					log.Printf("percent: %v", percent)
+					if Debug == true {
+						log.Printf("percent: %v", percent)
+					}
+
 					if percent != oldPercent {
 						oldPercent = percent
 						ch <- newProgressEvent(total, computed, percent)
