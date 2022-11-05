@@ -19,95 +19,95 @@ func (e *event) When() time.Time {
 	return e.t
 }
 
-// ErrorEvent occurs when a error occurs when computing hashes.
-type ErrorEvent struct {
+// EventError occurs when a error occurs when computing hashes.
+type EventError struct {
 	*event
 	e error
 }
 
-func newErrorEvent(err error) *ErrorEvent {
-	return &ErrorEvent{event: newEvent(), e: err}
+func newEventError(err error) *EventError {
+	return &EventError{event: newEvent(), e: err}
 }
 
 // Err returns the error contained in the event.
-func (ev *ErrorEvent) Err() error {
+func (ev *EventError) Err() error {
 	return ev.e
 }
 
-type computedEvent struct {
+type eventComputed struct {
 	*event
 	computed int64
 }
 
-func newComputedEvent(computed int64) *computedEvent {
-	return &computedEvent{event: newEvent(), computed: computed}
+func newEventComputed(computed int64) *eventComputed {
+	return &eventComputed{event: newEvent(), computed: computed}
 }
 
-func (ev *computedEvent) Computed() int64 {
+func (ev *eventComputed) Computed() int64 {
 	return ev.computed
 }
 
-// ProgressEvent occurs when the progress of computing hashes updates.
-type ProgressEvent struct {
+// EventProgress occurs when the progress of computing hashes updates.
+type EventProgress struct {
 	*event
 	total   int64
 	current int64
 	percent float32
 }
 
-func newProgressEvent(total int64, current int64, percent float32) *ProgressEvent {
-	return &ProgressEvent{event: newEvent(), total: total, current: current, percent: percent}
+func newEventProgress(total int64, current int64, percent float32) *EventProgress {
+	return &EventProgress{event: newEvent(), total: total, current: current, percent: percent}
 }
 
 // Total returns totoal progress.
-func (ev *ProgressEvent) Total() int64 {
+func (ev *EventProgress) Total() int64 {
 	return ev.total
 }
 
 // Current return current progress.
-func (ev *ProgressEvent) Current() int64 {
+func (ev *EventProgress) Current() int64 {
 	return ev.current
 }
 
 // Percent returns the percent of current progress.
-func (ev *ProgressEvent) Percent() float32 {
+func (ev *EventProgress) Percent() float32 {
 	return ev.percent
 }
 
-// StopEvent occurs when computing hashes is stopped.
-type StopEvent struct {
-	*computedEvent
+// EventStop occurs when computing hashes is stopped.
+type EventStop struct {
+	*eventComputed
 	states map[string][]byte
 }
 
-func newStopEvent(computed int64, states map[string][]byte) *StopEvent {
-	return &StopEvent{
-		computedEvent: newComputedEvent(computed),
+func newEventStop(computed int64, states map[string][]byte) *EventStop {
+	return &EventStop{
+		eventComputed: newEventComputed(computed),
 		states:        states,
 	}
 }
 
 // States returns the states which can be used to compute hashes next time.
 // The states are stored in a map which key is the hash function name and value is the state in byte slice.
-func (ev *StopEvent) States() map[string][]byte {
+func (ev *EventStop) States() map[string][]byte {
 	return ev.states
 }
 
-// OKEvent occurs when computing hashes is done.
-type OKEvent struct {
-	*computedEvent
+// EventOK occurs when computing hashes is done.
+type EventOK struct {
+	*eventComputed
 	checksums map[string][]byte
 }
 
-func newOKEvent(computed int64, checksums map[string][]byte) *OKEvent {
-	return &OKEvent{
-		computedEvent: newComputedEvent(computed),
+func newEventOK(computed int64, checksums map[string][]byte) *EventOK {
+	return &EventOK{
+		eventComputed: newEventComputed(computed),
 		checksums:     checksums,
 	}
 }
 
 // Checksums returns the checksums.
 // The checksums are stored in a map which key is the hash function name and value is the checksum in byte slice.
-func (ev *OKEvent) Checksums() map[string][]byte {
+func (ev *EventOK) Checksums() map[string][]byte {
 	return ev.checksums
 }

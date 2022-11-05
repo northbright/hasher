@@ -230,13 +230,13 @@ func (h *Hasher) Start(
 		// Get hashes and multiple writer.
 		hashes, w, err := getHashesAndWriter(h.hashFuncs)
 		if err != nil {
-			ch <- newErrorEvent(err)
+			ch <- newEventError(err)
 			return
 		}
 
 		if states != nil {
 			if err := loadStates(hashes, states); err != nil {
-				ch <- newErrorEvent(err)
+				ch <- newEventError(err)
 				return
 			}
 		}
@@ -268,22 +268,22 @@ func (h *Hasher) Start(
 
 					if percent != oldPercent {
 						oldPercent = percent
-						ch <- newProgressEvent(total, computed, percent)
+						ch <- newEventProgress(total, computed, percent)
 					}
 				}
 
 			case <-ctx.Done():
 				states, err := outputStates(hashes)
 				if err != nil {
-					ch <- newErrorEvent(err)
+					ch <- newEventError(err)
 					return
 				}
-				ch <- newStopEvent(computed, states)
+				ch <- newEventStop(computed, states)
 				return
 			default:
 				n, err := r.Read(buf)
 				if err != nil && err != io.EOF {
-					ch <- newErrorEvent(err)
+					ch <- newEventError(err)
 					return
 				}
 
@@ -294,11 +294,11 @@ func (h *Hasher) Start(
 						checksums[name] = hash.Sum(nil)
 					}
 
-					ch <- newOKEvent(computed, checksums)
+					ch <- newEventOK(computed, checksums)
 					return
 				} else {
 					if n, err = w.Write(buf[:n]); err != nil {
-						ch <- newErrorEvent(err)
+						ch <- newEventError(err)
 						return
 					}
 				}

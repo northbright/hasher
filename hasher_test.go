@@ -30,12 +30,12 @@ func ExampleHasher_Start() {
 
 	for event := range ch {
 		switch ev := event.(type) {
-		case *hasher.ErrorEvent:
+		case *hasher.EventError:
 			log.Printf("on error: %v", ev.Err())
 			return
-		case *hasher.StopEvent:
+		case *hasher.EventStop:
 			log.Printf("on stopped:\ncomputed: %v, states: %v", ev.Computed(), ev.States())
-		case *hasher.OKEvent:
+		case *hasher.EventOK:
 			log.Printf("on ok:\ncomputed: %v\nchecksums:\n", ev.Computed())
 			for name, checksum := range ev.Checksums() {
 				log.Printf("%s: %X", name, checksum)
@@ -68,14 +68,14 @@ func ExampleHasher_Start() {
 
 	for event := range ch {
 		switch ev := event.(type) {
-		case *hasher.ErrorEvent:
+		case *hasher.EventError:
 			log.Printf("on error: %v", ev.Err())
 			return
-		case *hasher.ProgressEvent:
+		case *hasher.EventProgress:
 			log.Printf("on progress: %.2f%%", ev.Percent())
-		case *hasher.StopEvent:
+		case *hasher.EventStop:
 			log.Printf("on stopped:\ncomputed: %v, states: %v", ev.Computed(), ev.States())
-		case *hasher.OKEvent:
+		case *hasher.EventOK:
 			log.Printf("on ok:\ncomputed: %v\nchecksums:\n", ev.Computed())
 			for name, checksum := range ev.Checksums() {
 				if name == "SHA-256" {
