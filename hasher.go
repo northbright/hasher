@@ -16,22 +16,37 @@ import (
 )
 
 const (
+	// DefBufSize is the default buffer size used to compute hashes.
 	DefBufSize = int64(32 * 1024)
+	// MaxBufSize is the max buffer size.
 	MaxBufSize = int64(4 * 1024 * 1024 * 1024)
 )
 
 var (
+	// Debug turns on / off debug mode.
+	// It'll output debug messages in debug mode.
 	Debug = false
 
-	ErrNoHashFunc                  = errors.New("no hash function specified")
+	// ErrNoHashFunc is returned by getHashesAndWriter when there's no hash function specified.
+	ErrNoHashFunc = errors.New("no hash function specified")
+
+	// ErrUnmatchedHashFuncsAndStates is returned by Hasher.Start when hash functions and states are unmatched.
 	ErrUnmatchedHashFuncsAndStates = errors.New("unmatched hash functions and states")
-	ErrNotBinaryUnmarshaler        = errors.New("encoding.BinaryUnmarshaler not implemented")
-	ErrNotBinaryMarshaler          = errors.New("encoding.BinaryMarshaler not implemented")
-	ErrUnSupportedHashFunc         = errors.New("unsupported hash function")
-	ErrUnmatchedStringLenAndOffset = errors.New("unmatched string length and offset")
-	DefReportProgressInterval      = time.Millisecond * 500
+
+	// ErrNotBinaryUnmarshaler is returned by Hasher.Start when encoding.BinaryUnmarshaler is not implemented.
+	ErrNotBinaryUnmarshaler = errors.New("encoding.BinaryUnmarshaler not implemented")
+
+	// ErrNotBinaryMarshaler is returned by Hasher.Start when encoding.BinaryMarshaler is not implemented.
+	ErrNotBinaryMarshaler = errors.New("encoding.BinaryMarshaler not implemented")
+
+	// ErrUnSupportedHashFunc is returned by GetHashByName to indicate that the hash function is not supported.
+	ErrUnSupportedHashFunc = errors.New("unsupported hash function")
+
+	// DefReportProgressInterval is used in Hasher.Start as the default interval to report the progress of computing hashes.
+	DefReportProgressInterval = time.Millisecond * 500
 )
 
+// AvailableHashFuncs returns the available hash functions.
 func AvailableHashFuncs() []string {
 	return []string{
 		"MD5",
@@ -42,6 +57,7 @@ func AvailableHashFuncs() []string {
 	}
 }
 
+// GetHashByName returns the hash.Hash by given hash function name.
 func GetHashByName(name string) (hash.Hash, error) {
 
 	switch name {
@@ -60,6 +76,7 @@ func GetHashByName(name string) (hash.Hash, error) {
 	}
 }
 
+// updateBufferSize checks and returns a valid buffer size.
 func updateBufferSize(bufferSize int64) int64 {
 	switch {
 	case bufferSize <= 0:
@@ -71,11 +88,13 @@ func updateBufferSize(bufferSize int64) int64 {
 	}
 }
 
+// A Hasher is used to compute hashes.
 type Hasher struct {
 	hashFuncs  []string
 	bufferSize int64
 }
 
+// getHashesAndWriter returns a map(key: hash function name, value: hash.Hash) and the a multiple writer.
 func getHashesAndWriter(hashFuncs []string) (map[string]hash.Hash, io.Writer, error) {
 	var (
 		hashes  = make(map[string]hash.Hash)
@@ -102,6 +121,7 @@ func getHashesAndWriter(hashFuncs []string) (map[string]hash.Hash, io.Writer, er
 	return hashes, w, nil
 }
 
+// New creates a Hasher by given hash function names and buffer size.
 func New(hashFuncs []string, bufferSize int64) *Hasher {
 	return &Hasher{
 		hashFuncs:  hashFuncs,
@@ -109,6 +129,9 @@ func New(hashFuncs []string, bufferSize int64) *Hasher {
 	}
 }
 
+// loadStates loads the saved states.
+// hashes is a map which key is hash function name and value is hash.Hash.
+// states is a map which key is hash function name and value is the state in byte slice.
 func loadStates(hashes map[string]hash.Hash, states map[string][]byte) error {
 	if states == nil {
 		return nil
@@ -140,6 +163,9 @@ func loadStates(hashes map[string]hash.Hash, states map[string][]byte) error {
 	return nil
 }
 
+// outputStates outputs the states.
+// hashes: a map which key is hash function name and value is hash.Hash.
+// return: a map which key is hash function name and value is the state in byte slice.
 func outputStates(hashes map[string]hash.Hash) (map[string][]byte, error) {
 	states := make(map[string][]byte)
 
@@ -169,6 +195,13 @@ func ComputePercent(total, current int64) float32 {
 	return 0
 }
 
+// Start returns a Event channel to receive events and starts a goroutine to compute hashes.
+// ctx: context.Context.
+// r: io.Reader to read the data from.
+// total: total size to read and compute hashes.
+// reportProgressInterval: interval to report the progress of computing hashes.
+// It will be set to DefReportProgressInterval if it's 0.
+// states: a map contains the states(key: hash function name, value: state in byte slice)
 func (h *Hasher) Start(
 	ctx context.Context,
 	r io.Reader,
