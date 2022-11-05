@@ -101,7 +101,7 @@ func getHashesAndWriter(hashFuncs []string) (map[string]hash.Hash, io.Writer, er
 		writers []io.Writer
 	)
 
-	if hashFuncs == nil || len(hashFuncs) == 0 {
+	if len(hashFuncs) == 0 {
 		return nil, nil, ErrNoHashFunc
 	}
 
