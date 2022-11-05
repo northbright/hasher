@@ -253,13 +253,13 @@ func (h *Hasher) Start(
 		for {
 			select {
 			case t := <-ticker.C:
-				if Debug == true {
+				if Debug {
 					log.Printf("ticker: t: %v", t)
 				}
 
 				if total > 0 {
 					percent = ComputePercent(total, computed)
-					if Debug == true {
+					if Debug {
 						log.Printf("percent: %v", percent)
 					}
 
