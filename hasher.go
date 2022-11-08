@@ -295,7 +295,16 @@ func (h *Hasher) Start(
 					return
 				}
 
+				// All done.
 				if n == 0 {
+					// Stop ticker and send 100 percent progress event.
+					if ticker != nil {
+						ticker.Stop()
+					}
+
+					ch <- newEventProgress(total, total, 100)
+
+					// Get final checksums.
 					checksums := make(map[string][]byte)
 
 					for name, hash := range hashes {
