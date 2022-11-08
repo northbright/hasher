@@ -122,6 +122,14 @@ func getHashesAndWriter(hashFuncs []string) (map[string]hash.Hash, io.Writer, er
 }
 
 // New creates a Hasher by given hash function names and buffer size.
+// hashFuncs: the hash function names.
+// Currently available hash function names:
+// "MD5",
+// "CRC-32",
+// "SHA-1",
+// "SHA-256",
+// "SHA-512"
+// You may call AvailableHashFuncs to get the supported hash functions.
 func New(hashFuncs []string, bufferSize int64) *Hasher {
 	return &Hasher{
 		hashFuncs:  hashFuncs,
