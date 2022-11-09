@@ -207,6 +207,7 @@ func ComputePercent(total, current int64) float32 {
 // ctx: context.Context.
 // r: io.Reader to read the data from.
 // total: total size to read and compute hashes.
+// If total size is unknown, set total to 0 and it won't report the progress.
 // reportProgressInterval: interval to report the progress of computing hashes.
 // It will be set to DefReportProgressInterval if it's 0.
 // states: a map contains the states(key: hash function name, value: state in byte slice)
@@ -297,12 +298,15 @@ func (h *Hasher) Start(
 
 				// All done.
 				if n == 0 {
-					// Stop ticker and send 100 percent progress event.
+					// Stop ticker.
 					if ticker != nil {
 						ticker.Stop()
 					}
 
-					ch <- newEventProgress(total, total, 100)
+					// Send 100 percent progress event.
+					if total > 0 {
+						ch <- newEventProgress(total, total, 100)
+					}
 
 					// Get final checksums.
 					checksums := make(map[string][]byte)
