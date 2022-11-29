@@ -211,6 +211,10 @@ func ComputePercent(total, current int64) float32 {
 // reportProgressInterval: interval to report the progress of computing hashes.
 // It will be set to DefReportProgressInterval if it's 0.
 // states: a map contains the states(key: hash function name, value: state in byte slice)
+// The states are stored in the EventStop event which
+// will be send to the channel when the goroutine exits(user cancel or timeout).
+// Set the states to previously saved states to continue to compute the hashes.
+// Make sure the offset for the next read(r) matches the states.
 //
 // It provides caller an event channel to receive events.
 // The channel is closed automatically when the goroutine exits(an error occurs, user cancels, computing hash checksums is done).
