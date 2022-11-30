@@ -34,19 +34,6 @@ func (ev *EventError) Err() error {
 	return ev.e
 }
 
-type eventComputed struct {
-	*event
-	computed int64
-}
-
-func newEventComputed(computed int64) *eventComputed {
-	return &eventComputed{event: newEvent(), computed: computed}
-}
-
-func (ev *eventComputed) Computed() int64 {
-	return ev.computed
-}
-
 // EventProgress occurs when the progress of computing hashes updates.
 type EventProgress struct {
 	*event
@@ -76,14 +63,16 @@ func (ev *EventProgress) Percent() float32 {
 
 // EventStop occurs when computing hashes is stopped.
 type EventStop struct {
-	*eventComputed
-	states map[string][]byte
+	*event
+	computed int64
+	states   map[string][]byte
 }
 
 func newEventStop(computed int64, states map[string][]byte) *EventStop {
 	return &EventStop{
-		eventComputed: newEventComputed(computed),
-		states:        states,
+		event:    newEvent(),
+		computed: computed,
+		states:   states,
 	}
 }
 
@@ -93,16 +82,23 @@ func (ev *EventStop) States() map[string][]byte {
 	return ev.states
 }
 
+// Computed return the number of bytes which have been computed.
+func (ev *EventStop) Computed() int64 {
+	return ev.computed
+}
+
 // EventOK occurs when computing hashes is done.
 type EventOK struct {
-	*eventComputed
+	*event
+	computed  int64
 	checksums map[string][]byte
 }
 
 func newEventOK(computed int64, checksums map[string][]byte) *EventOK {
 	return &EventOK{
-		eventComputed: newEventComputed(computed),
-		checksums:     checksums,
+		event:     newEvent(),
+		computed:  computed,
+		checksums: checksums,
 	}
 }
 
@@ -110,4 +106,9 @@ func newEventOK(computed int64, checksums map[string][]byte) *EventOK {
 // The checksums are stored in a map which key is the hash function name and value is the checksum in byte slice.
 func (ev *EventOK) Checksums() map[string][]byte {
 	return ev.checksums
+}
+
+// Computed return the number of bytes which have been computed.
+func (ev *EventOK) Computed() int64 {
+	return ev.computed
 }
