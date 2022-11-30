@@ -64,27 +64,34 @@ func (ev *EventProgress) Percent() float32 {
 // EventStop occurs when computing hashes is stopped.
 type EventStop struct {
 	*event
+	err      error
 	computed int64
 	states   map[string][]byte
 }
 
-func newEventStop(computed int64, states map[string][]byte) *EventStop {
+func newEventStop(err error, computed int64, states map[string][]byte) *EventStop {
 	return &EventStop{
 		event:    newEvent(),
+		err:      err,
 		computed: computed,
 		states:   states,
 	}
+}
+
+// Computed return the number of bytes which have been computed.
+func (ev *EventStop) Computed() int64 {
+	return ev.computed
+}
+
+// Err() returns the error comes from ctx.Err() which explains why hashing goroutine is stopped.
+func (ev *EventStop) Err() error {
+	return ev.err
 }
 
 // States returns the states which can be used to compute hashes next time.
 // The states are stored in a map which key is the hash function name and value is the state in byte slice.
 func (ev *EventStop) States() map[string][]byte {
 	return ev.states
-}
-
-// Computed return the number of bytes which have been computed.
-func (ev *EventStop) Computed() int64 {
-	return ev.computed
 }
 
 // EventOK occurs when computing hashes is done.
@@ -102,13 +109,13 @@ func newEventOK(computed int64, checksums map[string][]byte) *EventOK {
 	}
 }
 
+// Computed return the number of bytes which have been computed.
+func (ev *EventOK) Computed() int64 {
+	return ev.computed
+}
+
 // Checksums returns the checksums.
 // The checksums are stored in a map which key is the hash function name and value is the checksum in byte slice.
 func (ev *EventOK) Checksums() map[string][]byte {
 	return ev.checksums
-}
-
-// Computed return the number of bytes which have been computed.
-func (ev *EventOK) Computed() int64 {
-	return ev.computed
 }

@@ -291,7 +291,7 @@ func (h *Hasher) Start(
 					ch <- newEventError(err)
 					return
 				}
-				ch <- newEventStop(computed, states)
+				ch <- newEventStop(err, computed, states)
 				return
 			default:
 				n, err := r.Read(buf)
