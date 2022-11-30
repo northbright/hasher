@@ -30,19 +30,19 @@ var (
 	// ErrNoHashFunc is returned by getHashesAndWriter when there's no hash function specified.
 	ErrNoHashFunc = errors.New("no hash function specified")
 
-	// ErrUnmatchedHashFuncsAndStates is returned by Hasher.Start when hash functions and states are unmatched.
+	// ErrUnmatchedHashFuncsAndStates is returned by Hasher.Start or StartWithStates when hash functions and states are unmatched.
 	ErrUnmatchedHashFuncsAndStates = errors.New("unmatched hash functions and states")
 
-	// ErrNotBinaryUnmarshaler is returned by Hasher.Start when encoding.BinaryUnmarshaler is not implemented.
+	// ErrNotBinaryUnmarshaler is returned by Hasher.Start or StartWithStates when encoding.BinaryUnmarshaler is not implemented.
 	ErrNotBinaryUnmarshaler = errors.New("encoding.BinaryUnmarshaler not implemented")
 
-	// ErrNotBinaryMarshaler is returned by Hasher.Start when encoding.BinaryMarshaler is not implemented.
+	// ErrNotBinaryMarshaler is returned by Hasher.Start or StartWithStates when encoding.BinaryMarshaler is not implemented.
 	ErrNotBinaryMarshaler = errors.New("encoding.BinaryMarshaler not implemented")
 
 	// ErrUnSupportedHashFunc is returned by GetHashByName to indicate that the hash function is not supported.
 	ErrUnSupportedHashFunc = errors.New("unsupported hash function")
 
-	// DefReportProgressInterval is used in Hasher.Start as the default interval to report the progress of computing hashes.
+	// DefReportProgressInterval is used in Hasher.Start or StartWithStates as the default interval to report the progress of computing hashes.
 	DefReportProgressInterval = time.Millisecond * 500
 )
 
@@ -203,7 +203,7 @@ func ComputePercent(total, current int64) float32 {
 	return 0
 }
 
-// Start returns an event channel to receive events and starts a goroutine to compute hashes.
+// StartWithStates returns an event channel to receive events and starts a goroutine to compute hashes.
 // ctx: context.Context.
 // r: io.Reader to read the data from.
 // total: total size to read and compute hashes.
@@ -218,7 +218,7 @@ func ComputePercent(total, current int64) float32 {
 //
 // It provides caller an event channel to receive events.
 // The channel is closed automatically when the goroutine exits(an error occurs, user cancels, computing hash checksums is done).
-func (h *Hasher) Start(
+func (h *Hasher) StartWithStates(
 	ctx context.Context,
 	r io.Reader,
 	total int64,
@@ -334,4 +334,23 @@ func (h *Hasher) Start(
 	}(ch)
 
 	return ch
+}
+
+// Starts returns an event channel to receive events and starts a goroutine to compute hashes.
+// ctx: context.Context.
+// r: io.Reader to read the data from.
+// total: total size to read and compute hashes.
+// If total size is unknown, set total to 0 and it won't report the progress.
+// reportProgressInterval: interval to report the progress of computing hashes.
+// It will be set to DefReportProgressInterval if it's 0.
+//
+// It provides caller an event channel to receive events.
+// The channel is closed automatically when the goroutine exits(an error occurs, user cancels, computing hash checksums is done).
+func (h *Hasher) Start(
+	ctx context.Context,
+	r io.Reader,
+	total int64,
+	reportProgressInterval time.Duration,
+) <-chan Event {
+	return h.StartWithStates(ctx, r, total, reportProgressInterval, nil)
 }

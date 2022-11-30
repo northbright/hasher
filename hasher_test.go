@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,8 +27,9 @@ func ExampleHasher_Start() {
 	// Read a string and compute hashes.
 	str := "Hello World!"
 	ctx := context.Background()
+
 	// Start computing the hash of the string.
-	ch := h.Start(ctx, strings.NewReader(str), 0, 0, nil)
+	ch := h.Start(ctx, strings.NewReader(str), 0, 0)
 
 	for event := range ch {
 		switch ev := event.(type) {
@@ -48,24 +50,24 @@ func ExampleHasher_Start() {
 	// Read Golang package on remote and compute hashes.
 	// See: https://golang.google.cn/dl/
 	goPkgURL := "https://golang.google.cn/dl/go1.19.3.darwin-amd64.pkg"
-	goPkgSHA256 := `a4941f5b09c43adeed13aaf435003a1e8852977037b3e6628d11047b087c4c66`
 
-	res, err := http.Get(goPkgURL)
+	resp, err := http.Get(goPkgURL)
 	if err != nil {
 		log.Printf("http.Get() error: %v", err)
 		return
 	}
 
-	if res.StatusCode != 200 {
-		log.Printf("status code is NOT 200: %v", res.StatusCode)
+	if resp.StatusCode != 200 {
+		log.Printf("status code is NOT 200: %v", resp.StatusCode)
 		return
 	}
 
-	log.Printf("res.ContentLength: %v", res.ContentLength)
-	fileSize := res.ContentLength
+	log.Printf("resp.ContentLength: %v", resp.ContentLength)
+	fileSize := resp.ContentLength
 
-	ch = h.Start(ctx, res.Body, fileSize, time.Millisecond*800, nil)
-	defer res.Body.Close()
+	// Start reading and hashing.
+	ch = h.Start(ctx, resp.Body, fileSize, time.Millisecond*800)
+	defer resp.Body.Close()
 
 	for event := range ch {
 		switch ev := event.(type) {
@@ -81,6 +83,7 @@ func ExampleHasher_Start() {
 			for name, checksum := range ev.Checksums() {
 				if name == "SHA-256" {
 					checksumStr := fmt.Sprintf("%x", checksum)
+					goPkgSHA256 := `a4941f5b09c43adeed13aaf435003a1e8852977037b3e6628d11047b087c4c66`
 					if strings.Compare(goPkgSHA256, checksumStr) != 0 {
 						log.Printf("SHA-256 checksums are different: original: %v, computed: %v", goPkgSHA256, checksumStr)
 						return
@@ -102,22 +105,20 @@ func ExampleHasher_Start() {
 	// But use progress bar to show progress
 	// instead of processing progress events.
 	// See https://github.com/cheggaaa/pb for more info.
-	goPkgURL = "https://golang.google.cn/dl/go1.19.3.darwin-amd64.pkg"
-	goPkgSHA256 = `a4941f5b09c43adeed13aaf435003a1e8852977037b3e6628d11047b087c4c66`
 
-	res, err = http.Get(goPkgURL)
+	resp, err = http.Get(goPkgURL)
 	if err != nil {
 		log.Printf("http.Get() error: %v", err)
 		return
 	}
 
-	if res.StatusCode != 200 {
-		log.Printf("status code is NOT 200: %v", res.StatusCode)
+	if resp.StatusCode != 200 {
+		log.Printf("status code is NOT 200: %v", resp.StatusCode)
 		return
 	}
 
-	log.Printf("res.ContentLength: %v", res.ContentLength)
-	fileSize = res.ContentLength
+	log.Printf("resp.ContentLength: %v", resp.ContentLength)
+	fileSize = resp.ContentLength
 
 	// Create a progress bar with default preset.
 	bar := pb.Default.Start64(fileSize)
@@ -125,13 +126,14 @@ func ExampleHasher_Start() {
 	// pb.Reader implements the io.Reader interface.
 	// Create a proxy reader to make the progress bar get the number
 	// of bytes read.
-	barReader := bar.NewProxyReader(res.Body)
+	barReader := bar.NewProxyReader(resp.Body)
 
 	// Stop the progress bar after use.
 	defer bar.Finish()
 
-	ch = h.Start(ctx, barReader, fileSize, time.Millisecond*800, nil)
-	defer res.Body.Close()
+	// Start reading and hashing.
+	ch = h.Start(ctx, barReader, fileSize, time.Millisecond*800)
+	defer resp.Body.Close()
 
 	for event := range ch {
 		switch ev := event.(type) {
@@ -148,6 +150,185 @@ func ExampleHasher_Start() {
 			for name, checksum := range ev.Checksums() {
 				if name == "SHA-256" {
 					checksumStr := fmt.Sprintf("%x", checksum)
+					goPkgSHA256 := `a4941f5b09c43adeed13aaf435003a1e8852977037b3e6628d11047b087c4c66`
+					if strings.Compare(goPkgSHA256, checksumStr) != 0 {
+						log.Printf("SHA-256 checksums are different: original: %v, computed: %v", goPkgSHA256, checksumStr)
+						return
+					} else {
+						// Checksum is correct.
+						log.Printf("SHA-256 checksum is verified")
+					}
+				}
+
+				log.Printf("%s: %X", name, checksum)
+			}
+		}
+	}
+
+	// Output:
+}
+
+func ExampleHasher_StartWithStates() {
+	var err error
+
+	hashFuncs := []string{
+		"MD5",
+		"SHA-1",
+		"SHA-256",
+	}
+	bufferSize := int64(16 * 1024 * 1024)
+
+	h := hasher.New(hashFuncs, bufferSize)
+
+	// Read Golang package on remote and compute hashes.
+	// See: https://golang.google.cn/dl/
+	// Stop reading / hashing and save the states when the progress > 50.
+	// Then continue to read / hash with saved states.
+
+	// Step 1
+	// Read and hash the file for the first time.
+	goPkgURL := "https://golang.google.cn/dl/go1.19.3.darwin-amd64.pkg"
+
+	resp, err := http.Get(goPkgURL)
+	if err != nil {
+		log.Printf("http.Get() error: %v", err)
+		return
+	}
+
+	if resp.StatusCode != 200 {
+		log.Printf("status code is NOT 200: %v", resp.StatusCode)
+		return
+	}
+
+	log.Printf("resp.ContentLength: %v", resp.ContentLength)
+	fileSize := resp.ContentLength
+
+	// Create a progress bar with default preset.
+	bar := pb.Default.Start64(fileSize)
+
+	// pb.Reader implements the io.Reader interface.
+	// Create a proxy reader to make the progress bar get the number
+	// of bytes read.
+	barReader := bar.NewProxyReader(resp.Body)
+
+	// Stop the progress bar after use.
+	defer bar.Finish()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch := h.Start(ctx, barReader, fileSize, time.Millisecond*100)
+	defer resp.Body.Close()
+
+	var (
+		computed int64 = 0
+		states         = make(map[string][]byte)
+	)
+
+	for event := range ch {
+		switch ev := event.(type) {
+		case *hasher.EventError:
+			log.Printf("on error: %v", ev.Err())
+			return
+		case *hasher.EventStop:
+			// Get the number of computed bytes and saved states.
+			computed = ev.Computed()
+			states = ev.States()
+			log.Printf("on stopped:\ncomputed: %v, states: %v", computed, states)
+		case *hasher.EventProgress:
+			percent := ev.Percent()
+			if percent >= 50 {
+				// Cancel reading / hashing if percent > 50
+				bar.Finish()
+				cancel()
+			}
+		}
+	}
+
+	// Step 2
+	// Continue to read / hash the file with saved states.
+	client := http.Client{}
+	req, _ := http.NewRequest("GET", goPkgURL, nil)
+
+	// Set request range.
+	bytesRange := fmt.Sprintf("bytes=%d-%d", computed, fileSize-1)
+	log.Printf("request range: %v", bytesRange)
+	req.Header.Add("range", bytesRange)
+
+	// Do HTTP request.
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Printf("do HTTP request error: %v", err)
+		return
+	}
+
+	// Check if status code is 206.
+	if resp.StatusCode != 206 {
+		log.Printf("status code is %v(NOT 206)", resp.StatusCode)
+		return
+	}
+
+	// Get total bytes to read from Content-Range.
+	contentRange := resp.Header.Get("Content-Range")
+	// Content-Range: bytes xx-xx/xx
+	log.Printf("Content-Range: %v", contentRange)
+
+	contentRange = strings.TrimLeft(contentRange, "bytes ")
+	log.Printf("after trim: %v", contentRange)
+
+	s := strings.Split(contentRange, "/")
+	if len(s) != 2 {
+		log.Printf("failed to split Content-Range(/)")
+		return
+	}
+
+	s = strings.Split(s[0], "-")
+	if len(s) != 2 {
+		log.Printf("failed to split Content-Range(-)")
+		return
+	}
+
+	log.Printf("s: %v", s)
+	start, _ := strconv.ParseInt(s[0], 10, 64)
+	end, _ := strconv.ParseInt(s[1], 10, 64)
+
+	// Both start and end position are inclusive.
+	total := end - start + 1
+	log.Printf("total = end(%v) - start(%v) + 1 = %v bytes need to continue to read / hash", end, start, total)
+
+	// Create a progress bar with default preset.
+	bar = pb.Default.Start64(total)
+
+	// pb.Reader implements the io.Reader interface.
+	// Create a proxy reader to make the progress bar get the number
+	// of bytes read.
+	barReader = bar.NewProxyReader(resp.Body)
+
+	// Stop the progress bar after use.
+	defer bar.Finish()
+
+	ctx = context.Background()
+
+	// Start reading at offset(content-range) and hashing with saved states.
+	ch = h.StartWithStates(ctx, barReader, total, time.Millisecond*800, states)
+	defer resp.Body.Close()
+
+	for event := range ch {
+		switch ev := event.(type) {
+		case *hasher.EventError:
+			log.Printf("on error: %v", ev.Err())
+			return
+		case *hasher.EventStop:
+			log.Printf("on stopped:\ncomputed: %v, states: %v", ev.Computed(), ev.States())
+		case *hasher.EventOK:
+			// Stop progressbar printing.
+			bar.Finish()
+
+			log.Printf("on ok:\ncomputed: %v\nchecksums:\n", ev.Computed())
+			for name, checksum := range ev.Checksums() {
+				if name == "SHA-256" {
+					checksumStr := fmt.Sprintf("%x", checksum)
+					goPkgSHA256 := `a4941f5b09c43adeed13aaf435003a1e8852977037b3e6628d11047b087c4c66`
 					if strings.Compare(goPkgSHA256, checksumStr) != 0 {
 						log.Printf("SHA-256 checksums are different: original: %v, computed: %v", goPkgSHA256, checksumStr)
 						return
