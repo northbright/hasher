@@ -12,9 +12,14 @@ jobs:
     strategy:
       matrix:
         os:
-        - Windows-2019
-        - macOS-10.15
-        - Ubuntu-20.04
+        - windows-2019
+        - windows-latest
+        - macos-11
+        - macos-12
+        - macos-latest
+        - ubuntu-20.04
+        - ubuntu-22.04
+        - ubuntu-latest
         go:
         - 1.17
         - 1.18
