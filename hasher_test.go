@@ -51,23 +51,23 @@ func ExampleHasher_Start() {
 	// See: https://golang.google.cn/dl/
 	goPkgURL := "https://golang.google.cn/dl/go1.19.3.darwin-amd64.pkg"
 
-	resp, err := http.Get(goPkgURL)
+	resp1, err := http.Get(goPkgURL)
 	if err != nil {
 		log.Printf("http.Get() error: %v", err)
 		return
 	}
 
-	if resp.StatusCode != 200 {
-		log.Printf("status code is NOT 200: %v", resp.StatusCode)
+	if resp1.StatusCode != 200 {
+		log.Printf("status code is NOT 200: %v", resp1.StatusCode)
 		return
 	}
 
-	log.Printf("resp.ContentLength: %v", resp.ContentLength)
-	fileSize := resp.ContentLength
+	log.Printf("resp1.ContentLength: %v", resp1.ContentLength)
+	fileSize := resp1.ContentLength
 
 	// Start reading and hashing.
-	ch = h.Start(ctx, resp.Body, fileSize, time.Millisecond*800)
-	defer resp.Body.Close()
+	ch = h.Start(ctx, resp1.Body, fileSize, time.Millisecond*800)
+	defer resp1.Body.Close()
 
 	for event := range ch {
 		switch ev := event.(type) {
@@ -106,19 +106,19 @@ func ExampleHasher_Start() {
 	// instead of processing progress events.
 	// See https://github.com/cheggaaa/pb for more info.
 
-	resp, err = http.Get(goPkgURL)
+	resp2, err := http.Get(goPkgURL)
 	if err != nil {
 		log.Printf("http.Get() error: %v", err)
 		return
 	}
 
-	if resp.StatusCode != 200 {
-		log.Printf("status code is NOT 200: %v", resp.StatusCode)
+	if resp2.StatusCode != 200 {
+		log.Printf("status code is NOT 200: %v", resp2.StatusCode)
 		return
 	}
 
-	log.Printf("resp.ContentLength: %v", resp.ContentLength)
-	fileSize = resp.ContentLength
+	log.Printf("resp2.ContentLength: %v", resp2.ContentLength)
+	fileSize = resp2.ContentLength
 
 	// Create a progress bar with default preset.
 	bar := pb.Default.Start64(fileSize)
@@ -126,14 +126,14 @@ func ExampleHasher_Start() {
 	// pb.Reader implements the io.Reader interface.
 	// Create a proxy reader to make the progress bar get the number
 	// of bytes read.
-	barReader := bar.NewProxyReader(resp.Body)
+	barReader := bar.NewProxyReader(resp2.Body)
 
 	// Stop the progress bar after use.
 	defer bar.Finish()
 
 	// Start reading and hashing.
 	ch = h.Start(ctx, barReader, fileSize, time.Millisecond*800)
-	defer resp.Body.Close()
+	defer resp2.Body.Close()
 
 	for event := range ch {
 		switch ev := event.(type) {
@@ -189,19 +189,19 @@ func ExampleHasher_StartWithStates() {
 	// Read and hash the file for the first time.
 	goPkgURL := "https://golang.google.cn/dl/go1.19.3.darwin-amd64.pkg"
 
-	resp, err := http.Get(goPkgURL)
+	resp1, err := http.Get(goPkgURL)
 	if err != nil {
 		log.Printf("http.Get() error: %v", err)
 		return
 	}
 
-	if resp.StatusCode != 200 {
-		log.Printf("status code is NOT 200: %v", resp.StatusCode)
+	if resp1.StatusCode != 200 {
+		log.Printf("status code is NOT 200: %v", resp1.StatusCode)
 		return
 	}
 
-	log.Printf("resp.ContentLength: %v", resp.ContentLength)
-	fileSize := resp.ContentLength
+	log.Printf("resp1.ContentLength: %v", resp1.ContentLength)
+	fileSize := resp1.ContentLength
 
 	// Create a progress bar with default preset.
 	bar := pb.Default.Start64(fileSize)
@@ -209,7 +209,7 @@ func ExampleHasher_StartWithStates() {
 	// pb.Reader implements the io.Reader interface.
 	// Create a proxy reader to make the progress bar get the number
 	// of bytes read.
-	barReader := bar.NewProxyReader(resp.Body)
+	barReader := bar.NewProxyReader(resp1.Body)
 
 	// Stop the progress bar after use.
 	defer bar.Finish()
@@ -218,7 +218,7 @@ func ExampleHasher_StartWithStates() {
 	defer cancel()
 
 	ch := h.Start(ctx, barReader, fileSize, time.Millisecond*100)
-	defer resp.Body.Close()
+	defer resp1.Body.Close()
 
 	var (
 		computed int64 = 0
@@ -256,20 +256,20 @@ func ExampleHasher_StartWithStates() {
 	req.Header.Add("range", bytesRange)
 
 	// Do HTTP request.
-	resp, err = client.Do(req)
+	resp2, err := client.Do(req)
 	if err != nil {
 		log.Printf("do HTTP request error: %v", err)
 		return
 	}
 
 	// Check if status code is 206.
-	if resp.StatusCode != 206 {
-		log.Printf("status code is %v(NOT 206)", resp.StatusCode)
+	if resp2.StatusCode != 206 {
+		log.Printf("status code is %v(NOT 206)", resp2.StatusCode)
 		return
 	}
 
 	// Get total bytes to read from Content-Range.
-	contentRange := resp.Header.Get("Content-Range")
+	contentRange := resp2.Header.Get("Content-Range")
 	// Content-Range: bytes xx-xx/xx
 	log.Printf("Content-Range: %v", contentRange)
 
@@ -302,7 +302,7 @@ func ExampleHasher_StartWithStates() {
 	// pb.Reader implements the io.Reader interface.
 	// Create a proxy reader to make the progress bar get the number
 	// of bytes read.
-	barReader = bar.NewProxyReader(resp.Body)
+	barReader = bar.NewProxyReader(resp2.Body)
 
 	// Stop the progress bar after use.
 	defer bar.Finish()
@@ -311,7 +311,7 @@ func ExampleHasher_StartWithStates() {
 
 	// Start reading at offset(content-range) and hashing with saved states.
 	ch = h.StartWithStates(ctx, barReader, total, time.Millisecond*800, states)
-	defer resp.Body.Close()
+	defer resp2.Body.Close()
 
 	for event := range ch {
 		switch ev := event.(type) {
