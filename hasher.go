@@ -9,348 +9,173 @@ import (
 	"encoding"
 	"errors"
 	"hash"
-	"hash/crc32"
 	"io"
-	"log"
+	"sort"
+	"strings"
 	"time"
-)
 
-const (
-	// DefBufSize is the default buffer size used to compute hashes.
-	DefBufSize = int64(32 * 1024)
-	// MaxBufSize is the max buffer size.
-	MaxBufSize = int64(4 * 1024 * 1024 * 1024)
+	"github.com/northbright/iocopy"
 )
 
 var (
-	// Debug turns on / off debug mode.
-	// It'll output debug messages in debug mode.
-	Debug = false
+	hashAlgsToNewFuncs = map[string]func() hash.Hash{
+		"MD5":     md5.New,
+		"SHA-1":   sha1.New,
+		"SHA-256": sha256.New,
+		"SHA-512": sha512.New,
+	}
 
-	// ErrNoHashFunc is returned by getHashesAndWriter when there's no hash function specified.
-	ErrNoHashFunc = errors.New("no hash function specified")
+	// ErrUnSupportedHashAlg indicates that the hash algorithm is not supported.
+	ErrUnSupportedHashAlg = errors.New("unsupported hash algorithm")
 
-	// ErrUnmatchedHashFuncsAndStates is returned by Hasher.Start or StartWithStates when hash functions and states are unmatched.
-	ErrUnmatchedHashFuncsAndStates = errors.New("unmatched hash functions and states")
+	// No states specified
+	ErrNoStates = errors.New("no states")
 
-	// ErrNotBinaryUnmarshaler is returned by Hasher.Start or StartWithStates when encoding.BinaryUnmarshaler is not implemented.
-	ErrNotBinaryUnmarshaler = errors.New("encoding.BinaryUnmarshaler not implemented")
+	// Not encoding.BinaryMarshaler
+	ErrNotBinaryMarshaler = errors.New("not binary marshaler")
 
-	// ErrNotBinaryMarshaler is returned by Hasher.Start or StartWithStates when encoding.BinaryMarshaler is not implemented.
-	ErrNotBinaryMarshaler = errors.New("encoding.BinaryMarshaler not implemented")
-
-	// ErrUnSupportedHashFunc is returned by GetHashByName to indicate that the hash function is not supported.
-	ErrUnSupportedHashFunc = errors.New("unsupported hash function")
-
-	// DefReportProgressInterval is used in Hasher.Start or StartWithStates as the default interval to report the progress of computing hashes.
-	DefReportProgressInterval = time.Millisecond * 500
+	// Not encoding.BinaryUnmarshaler
+	ErrNotBinaryUnmarshaler = errors.New("not binary unmarshaler")
 )
 
-// AvailableHashFuncs returns the available hash functions.
-func AvailableHashFuncs() []string {
-	return []string{
-		"MD5",
-		"CRC-32",
-		"SHA-1",
-		"SHA-256",
-		"SHA-512",
+// SupportedHashAlgs returns supported hash algorithms of this package.
+func SupportedHashAlgs() []string {
+	var algs []string
+
+	for alg := range hashAlgsToNewFuncs {
+		algs = append(algs, alg)
 	}
+
+	// Sort hash algorithms by names.
+	sort.Slice(algs, func(i, j int) bool {
+		return algs[i] < algs[j]
+	})
+
+	return algs
 }
 
-// GetHashByName returns the hash.Hash by given hash function name.
-func GetHashByName(name string) (hash.Hash, error) {
-
-	switch name {
-	case "MD5":
-		return md5.New(), nil
-	case "CRC-32":
-		return crc32.NewIEEE(), nil
-	case "SHA-1":
-		return sha1.New(), nil
-	case "SHA-256":
-		return sha256.New(), nil
-	case "SHA-512":
-		return sha512.New(), nil
-	default:
-		return nil, ErrUnSupportedHashFunc
-	}
-}
-
-// updateBufferSize checks and returns a valid buffer size.
-func updateBufferSize(bufferSize int64) int64 {
-	switch {
-	case bufferSize <= 0:
-		return DefBufSize
-	case bufferSize > MaxBufSize:
-		return MaxBufSize
-	default:
-		return bufferSize
-	}
-}
-
-// A Hasher is used to compute hashes.
+// Hasher is used to compute hash algorithm checksums.
 type Hasher struct {
-	hashFuncs  []string
-	bufferSize int64
+	hashes map[string]hash.Hash
+	r      io.Reader
 }
 
-// getHashesAndWriter returns a map(key: hash function name, value: hash.Hash) and the a multiple writer.
-func getHashesAndWriter(hashFuncs []string) (map[string]hash.Hash, io.Writer, error) {
+// New creates a new Hasher.
+// hashAlgs: hash algorithms to compute checksums.
+// readers: io.Reader(s) to read from.
+func New(hashAlgs []string, readers ...io.Reader) (*Hasher, error) {
+	hashes := make(map[string]hash.Hash)
+
+	r := io.MultiReader(readers...)
+
+	if hashAlgs == nil {
+		// Use all supported hash algorithms by default.
+		hashAlgs = SupportedHashAlgs()
+	}
+
+	for _, alg := range hashAlgs {
+		f, ok := hashAlgsToNewFuncs[alg]
+		if !ok {
+			return nil, ErrUnSupportedHashAlg
+		}
+		// Call f function to new a hash.Hash and insert it to the map.
+		hashes[alg] = f()
+	}
+
+	return &Hasher{r: r, hashes: hashes}, nil
+}
+
+func NewWithStates(states map[string][]byte, readers ...io.Reader) (*Hasher, error) {
 	var (
-		hashes  = make(map[string]hash.Hash)
-		writers []io.Writer
+		algs []string
 	)
 
-	if len(hashFuncs) == 0 {
-		return nil, nil, ErrNoHashFunc
-	}
-
-	// Get hash.Hash from hash func name.
-	for _, name := range hashFuncs {
-		hash, err := GetHashByName(name)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		hashes[name] = hash
-		writers = append(writers, hash)
-	}
-
-	w := io.MultiWriter(writers...)
-
-	return hashes, w, nil
-}
-
-// New creates a Hasher by given hash function names and buffer size.
-// hashFuncs: the hash function names.
-// Currently available hash function names:
-// "MD5",
-// "CRC-32",
-// "SHA-1",
-// "SHA-256",
-// "SHA-512"
-// You may call AvailableHashFuncs to get the supported hash functions.
-func New(hashFuncs []string, bufferSize int64) *Hasher {
-	return &Hasher{
-		hashFuncs:  hashFuncs,
-		bufferSize: updateBufferSize(bufferSize),
-	}
-}
-
-// loadStates loads the saved states.
-// hashes is a map which key is hash function name and value is hash.Hash.
-// states is a map which key is hash function name and value is the state in byte slice.
-func loadStates(hashes map[string]hash.Hash, states map[string][]byte) error {
 	if states == nil {
-		return nil
+		return nil, ErrNoStates
 	}
 
-	if len(hashes) != len(states) {
-		return ErrUnmatchedHashFuncsAndStates
+	for alg := range states {
+		algs = append(algs, alg)
 	}
 
-	for name := range hashes {
-		if _, ok := states[name]; !ok {
-			return ErrUnmatchedHashFuncsAndStates
-		}
+	h, err := New(algs, readers...)
+	if err != nil {
+		return nil, err
 	}
 
-	// Load states
-	for name, hash := range hashes {
-		// Convert hash to encoding.BinaryUnmarshaler
-		u, ok := hash.(encoding.BinaryUnmarshaler)
+	// Load binary state for each hash.Hash.
+	for alg, hash := range h.hashes {
+		unmarshaler, ok := hash.(encoding.BinaryUnmarshaler)
 		if !ok {
-			return ErrNotBinaryUnmarshaler
+			return nil, ErrNotBinaryUnmarshaler
 		}
 
-		if err := u.UnmarshalBinary(states[name]); err != nil {
-			return err
+		if err := unmarshaler.UnmarshalBinary(states[alg]); err != nil {
+			return nil, err
 		}
 	}
 
-	return nil
+	return h, nil
 }
 
-// outputStates outputs the states.
-// hashes: a map which key is hash function name and value is hash.Hash.
-// return: a map which key is hash function name and value is the state in byte slice.
-func outputStates(hashes map[string]hash.Hash) (map[string][]byte, error) {
-	states := make(map[string][]byte)
+func (h *Hasher) States() (map[string][]byte, error) {
+	var states = make(map[string][]byte)
 
-	for name, hash := range hashes {
-		// Convert hash to encoding.BinaryMarshaler
-		u, ok := hash.(encoding.BinaryMarshaler)
+	for alg, hash := range h.hashes {
+		marshaler, ok := hash.(encoding.BinaryMarshaler)
 		if !ok {
 			return nil, ErrNotBinaryMarshaler
 		}
 
-		state, err := u.MarshalBinary()
+		state, err := marshaler.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
 
-		states[name] = state
+		states[alg] = state
 	}
 
 	return states, nil
 }
 
-// ComputePercent computes the progress percent.
-func ComputePercent(total, current int64) float32 {
-	if total > 0 {
-		return float32(float64(current) / (float64(total) / float64(100)))
+func (h *Hasher) Checksums() map[string][]byte {
+	var checksums = make(map[string][]byte)
+
+	for alg, hash := range h.hashes {
+		checksums[alg] = hash.Sum(nil)
 	}
-	return 0
+
+	return checksums
 }
 
-// StartWithStates returns an event channel to receive events and starts a goroutine to compute hashes.
-// ctx: context.Context.
-// r: io.Reader to read the data from.
-// total: total size to read and compute hashes.
-// If total size is unknown, set total to 0 and it won't report the progress.
-// reportProgressInterval: interval to report the progress of computing hashes.
-// It will be set to DefReportProgressInterval if it's 0.
-// states: a map contains the states(key: hash function name, value: state in byte slice)
-// The states are stored in the EventStop event which
-// will be send to the channel when the goroutine exits(user cancel or timeout).
-// Set the states to previously saved states to continue to compute the hashes.
-// Make sure the offset for the next read(r) matches the states.
-//
-// It provides caller an event channel to receive events.
-// The channel is closed automatically when the goroutine exits(an error occurs, user cancels, computing hash checksums is done).
-func (h *Hasher) StartWithStates(
-	ctx context.Context,
-	r io.Reader,
-	total int64,
-	reportProgressInterval time.Duration,
-	states map[string][]byte,
-) <-chan Event {
-	ch := make(chan Event)
-
-	go func(ch chan Event) {
-		var (
-			ticker              *time.Ticker = nil
-			percent, oldPercent float32
-		)
-
-		defer func() {
-			close(ch)
-			if ticker != nil {
-				ticker.Stop()
-			}
-		}()
-
-		// Get hashes and multiple writer.
-		hashes, w, err := getHashesAndWriter(h.hashFuncs)
-		if err != nil {
-			ch <- newEventError(err)
-			return
-		}
-
-		if states != nil {
-			if err := loadStates(hashes, states); err != nil {
-				ch <- newEventError(err)
-				return
-			}
-		}
-
-		computed := int64(0)
-		buf := make([]byte, h.bufferSize)
-
-		if reportProgressInterval <= 0 {
-			reportProgressInterval = DefReportProgressInterval
-		}
-
-		ticker = time.NewTicker(reportProgressInterval)
-		if total <= 0 {
-			ticker.Stop()
-		}
-
-		for {
-			select {
-			case t := <-ticker.C:
-				if Debug {
-					log.Printf("ticker: t: %v", t)
-				}
-
-				if total > 0 {
-					percent = ComputePercent(total, computed)
-					if Debug {
-						log.Printf("percent: %v", percent)
-					}
-
-					if percent != oldPercent {
-						oldPercent = percent
-						ch <- newEventProgress(total, computed, percent)
-					}
-				}
-
-			case <-ctx.Done():
-				states, err := outputStates(hashes)
-				if err != nil {
-					ch <- newEventError(err)
-					return
-				}
-				ch <- newEventStop(err, computed, states)
-				return
-			default:
-				n, err := r.Read(buf)
-				if err != nil && err != io.EOF {
-					ch <- newEventError(err)
-					return
-				}
-
-				// All done.
-				if n == 0 {
-					// Stop ticker.
-					if ticker != nil {
-						ticker.Stop()
-					}
-
-					// Send 100 percent progress event.
-					if total > 0 {
-						ch <- newEventProgress(total, total, 100)
-					}
-
-					// Get final checksums.
-					checksums := make(map[string][]byte)
-
-					for name, hash := range hashes {
-						checksums[name] = hash.Sum(nil)
-					}
-
-					ch <- newEventOK(computed, checksums)
-					return
-				} else {
-					if n, err = w.Write(buf[:n]); err != nil {
-						ch <- newEventError(err)
-						return
-					}
-				}
-
-				computed += int64(n)
-			}
-		}
-	}(ch)
-
-	return ch
-}
-
-// Starts returns an event channel to receive events and starts a goroutine to compute hashes.
-// ctx: context.Context.
-// r: io.Reader to read the data from.
-// total: total size to read and compute hashes.
-// If total size is unknown, set total to 0 and it won't report the progress.
-// reportProgressInterval: interval to report the progress of computing hashes.
-// It will be set to DefReportProgressInterval if it's 0.
-//
-// It provides caller an event channel to receive events.
-// The channel is closed automatically when the goroutine exits(an error occurs, user cancels, computing hash checksums is done).
 func (h *Hasher) Start(
 	ctx context.Context,
-	r io.Reader,
-	total int64,
-	reportProgressInterval time.Duration,
-) <-chan Event {
-	return h.StartWithStates(ctx, r, total, reportProgressInterval, nil)
+	bufSize int64,
+	interval time.Duration) <-chan iocopy.Event {
+
+	var (
+		writers []io.Writer
+	)
+
+	for _, w := range h.hashes {
+		writers = append(writers, w)
+	}
+
+	// Create a multi-writer to compute multiple hash algorithms
+	// checksums.
+	w := io.MultiWriter(writers...)
+
+	// Return an event channel and start to copy.
+	return iocopy.Start(ctx, w, h.r, bufSize, interval)
+}
+
+func NewStringsHasher(hashAlgs []string, strs ...string) *Hasher {
+	var readers []io.Reader
+
+	for _, str := range strs {
+		readers = append(readers, strings.NewReader(str))
+	}
+
+	h, _ := New(hashAlgs, readers...)
+	return h
 }
