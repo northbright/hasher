@@ -36,6 +36,9 @@ var (
 
 	// Not encoding.BinaryUnmarshaler
 	ErrNotBinaryUnmarshaler = errors.New("not binary unmarshaler")
+
+	// No checksums computed.
+	ErrNoChecksums = errors.New("no checksums computed")
 )
 
 // SupportedHashAlgs returns supported hash algorithms of this package.
@@ -57,16 +60,12 @@ func SupportedHashAlgs() []string {
 // Hasher is used to compute hash algorithm checksums.
 type Hasher struct {
 	hashes map[string]hash.Hash
-	r      io.Reader
 }
 
 // New creates a new Hasher.
 // hashAlgs: hash algorithms to compute checksums.
-// readers: io.Reader(s) to read from.
-func New(hashAlgs []string, readers ...io.Reader) (*Hasher, error) {
+func New(hashAlgs ...string) (*Hasher, error) {
 	hashes := make(map[string]hash.Hash)
-
-	r := io.MultiReader(readers...)
 
 	if hashAlgs == nil {
 		// Use all supported hash algorithms by default.
@@ -82,10 +81,10 @@ func New(hashAlgs []string, readers ...io.Reader) (*Hasher, error) {
 		hashes[alg] = f()
 	}
 
-	return &Hasher{r: r, hashes: hashes}, nil
+	return &Hasher{hashes: hashes}, nil
 }
 
-func NewWithStates(states map[string][]byte, readers ...io.Reader) (*Hasher, error) {
+func NewWithStates(states map[string][]byte) (*Hasher, error) {
 	var (
 		algs []string
 	)
@@ -98,7 +97,7 @@ func NewWithStates(states map[string][]byte, readers ...io.Reader) (*Hasher, err
 		algs = append(algs, alg)
 	}
 
-	h, err := New(algs, readers...)
+	h, err := New(algs...)
 	if err != nil {
 		return nil, err
 	}
@@ -148,14 +147,17 @@ func (h *Hasher) Checksums() map[string][]byte {
 	return checksums
 }
 
-func (h *Hasher) Start(
+func (h *Hasher) Compute(
 	ctx context.Context,
 	bufSize int64,
-	interval time.Duration) <-chan iocopy.Event {
+	interval time.Duration,
+	readers ...io.Reader) <-chan iocopy.Event {
 
 	var (
 		writers []io.Writer
 	)
+
+	r := io.MultiReader(readers...)
 
 	for _, w := range h.hashes {
 		writers = append(writers, w)
@@ -166,16 +168,40 @@ func (h *Hasher) Start(
 	w := io.MultiWriter(writers...)
 
 	// Return an event channel and start to copy.
-	return iocopy.Start(ctx, w, h.r, bufSize, interval)
+	return iocopy.Start(ctx, w, r, bufSize, interval)
 }
 
-func NewStringsHasher(hashAlgs []string, strs ...string) *Hasher {
-	var readers []io.Reader
+func (h *Hasher) ComputeStrings(strs ...string) (checksums map[string][]byte, written int64, err error) {
+	var (
+		readers []io.Reader
+	)
 
 	for _, str := range strs {
 		readers = append(readers, strings.NewReader(str))
 	}
 
-	h, _ := New(hashAlgs, readers...)
-	return h
+	ch := h.Compute(
+		context.Background(),
+		iocopy.DefaultBufSize,
+		iocopy.DefaultInterval,
+		readers...)
+
+	for event := range ch {
+		switch ev := event.(type) {
+		case *iocopy.EventError:
+			err := ev.Err()
+			return nil, 0, err
+
+		case *iocopy.EventStop:
+			err := ev.Err()
+			return nil, 0, err
+
+		case *iocopy.EventOK:
+			n := ev.Written()
+			checksums := h.Checksums()
+			return checksums, n, nil
+		}
+	}
+
+	return nil, 0, ErrNoChecksums
 }

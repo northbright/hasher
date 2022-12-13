@@ -1,15 +1,13 @@
 package hasher_test
 
 import (
-	"context"
 	"fmt"
 	"log"
 
 	"github.com/northbright/hasher"
-	"github.com/northbright/iocopy"
 )
 
-func ExampleNewStringsHasher() {
+func ExampleHasher_ComputeStrings() {
 	// Example of computing strings hash.
 	// Compute the SHA-256 hash of the strings in offical example:
 	// https://pkg.go.dev/hash#example-package-BinaryMarshaler
@@ -18,35 +16,19 @@ func ExampleNewStringsHasher() {
 		input2 = "unaware of what he will find."
 	)
 
-	var (
-		// Specifiy 2 hash algorithms.
-		hashAlgs = []string{"MD5", "SHA-256"}
-		// Global checksums.
-		checksums = make(map[string][]byte)
-	)
+	// Create a hasher with given hash algorithms.
+	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512".
+	// Call SupportedHashAlgs to get all available hash algorithms.
+	h, _ := hasher.New("MD5", "SHA-256")
 
-	// Create a hasher with given hash algorithms and strings.
-	h := hasher.NewStringsHasher(hashAlgs, input1, input2)
+	// Compute the hashes of the strings.
+	checksums, n, _ := h.ComputeStrings(input1, input2)
 
-	// Start to compute the hash.
-	ch := h.Start(context.Background(), 32*1024, 0)
-
-	// Read iocopy.Event from the returned channel.
-	for event := range ch {
-		switch ev := event.(type) {
-		case *iocopy.EventOK:
-			// IO copy succeeded(computing hash completed).
-			n := ev.Written()
-			log.Printf("on EventOK: total %v written", n)
-
-			// Get checksums.
-			checksums = h.Checksums()
-			// Print checksum of each algorithm.
-			for alg, checksum := range checksums {
-				log.Printf("%v: %x", alg, checksum)
-			}
-		}
+	// Show the checksums and count of written bytes.
+	for alg, checksum := range checksums {
+		log.Printf("%s: %x", alg, checksum)
 	}
+	log.Printf("%d bytes written", n)
 
 	// Output SHA-256 checksum.
 	fmt.Printf("%x", checksums["SHA-256"])
