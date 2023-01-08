@@ -59,12 +59,14 @@ func SupportedHashAlgs() []string {
 
 // Hasher is used to compute hash algorithm checksums.
 type Hasher struct {
+	r      io.Reader
 	hashes map[string]hash.Hash
 }
 
 // New creates a new Hasher.
+// r: io.Reader to read data from.
 // hashAlgs: hash algorithms to compute checksums.
-func New(hashAlgs ...string) (*Hasher, error) {
+func New(r io.Reader, hashAlgs ...string) (*Hasher, error) {
 	hashes := make(map[string]hash.Hash)
 
 	if hashAlgs == nil {
@@ -81,10 +83,10 @@ func New(hashAlgs ...string) (*Hasher, error) {
 		hashes[alg] = f()
 	}
 
-	return &Hasher{hashes: hashes}, nil
+	return &Hasher{r: r, hashes: hashes}, nil
 }
 
-func NewWithStates(states map[string][]byte) (*Hasher, error) {
+func NewWithStates(r io.Reader, states map[string][]byte) (*Hasher, error) {
 	var (
 		algs []string
 	)
@@ -97,7 +99,7 @@ func NewWithStates(states map[string][]byte) (*Hasher, error) {
 		algs = append(algs, alg)
 	}
 
-	h, err := New(algs...)
+	h, err := New(r, algs...)
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +117,24 @@ func NewWithStates(states map[string][]byte) (*Hasher, error) {
 	}
 
 	return h, nil
+}
+
+func FromStrings(strs []string, hashAlgs ...string) (*Hasher, error) {
+	var (
+		readers []io.Reader
+	)
+
+	for _, str := range strs {
+		readers = append(readers, strings.NewReader(str))
+	}
+
+	r := io.MultiReader(readers...)
+
+	return New(r, hashAlgs...)
+}
+
+func FromString(str string, hashAlgs ...string) (*Hasher, error) {
+	return FromStrings([]string{str}, hashAlgs...)
 }
 
 func (h *Hasher) States() (map[string][]byte, error) {
@@ -147,17 +167,14 @@ func (h *Hasher) Checksums() map[string][]byte {
 	return checksums
 }
 
-func (h *Hasher) Compute(
+func (h *Hasher) Start(
 	ctx context.Context,
 	bufSize int64,
-	interval time.Duration,
-	readers ...io.Reader) <-chan iocopy.Event {
+	interval time.Duration) <-chan iocopy.Event {
 
 	var (
 		writers []io.Writer
 	)
-
-	r := io.MultiReader(readers...)
 
 	for _, w := range h.hashes {
 		writers = append(writers, w)
@@ -168,23 +185,14 @@ func (h *Hasher) Compute(
 	w := io.MultiWriter(writers...)
 
 	// Return an event channel and start to copy.
-	return iocopy.Start(ctx, w, r, bufSize, interval)
+	return iocopy.Start(ctx, w, h.r, bufSize, interval)
 }
 
-func (h *Hasher) ComputeStrings(strs ...string) (checksums map[string][]byte, written int64, err error) {
-	var (
-		readers []io.Reader
-	)
-
-	for _, str := range strs {
-		readers = append(readers, strings.NewReader(str))
-	}
-
-	ch := h.Compute(
+func (h *Hasher) Compute() (checksums map[string][]byte, written int64, err error) {
+	ch := h.Start(
 		context.Background(),
 		iocopy.DefaultBufSize,
-		iocopy.DefaultInterval,
-		readers...)
+		iocopy.DefaultInterval)
 
 	for event := range ch {
 		switch ev := event.(type) {

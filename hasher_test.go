@@ -7,7 +7,7 @@ import (
 	"github.com/northbright/hasher"
 )
 
-func ExampleHasher_ComputeStrings() {
+func ExampleFromStrings() {
 	// Example of computing strings hash.
 	// Compute the SHA-256 hash of the strings in offical example:
 	// https://pkg.go.dev/hash#example-package-BinaryMarshaler
@@ -19,10 +19,10 @@ func ExampleHasher_ComputeStrings() {
 	// Create a hasher with given hash algorithms.
 	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512".
 	// Call SupportedHashAlgs to get all available hash algorithms.
-	h, _ := hasher.New("MD5", "SHA-256")
+	h, _ := hasher.FromStrings([]string{input1, input2}, "MD5", "SHA-256")
 
 	// Compute the hashes of the strings.
-	checksums, n, _ := h.ComputeStrings(input1, input2)
+	checksums, n, _ := h.Compute()
 
 	// Show the checksums and count of written bytes.
 	for alg, checksum := range checksums {
