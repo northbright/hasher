@@ -28,8 +28,11 @@ func ExampleFromStrings() {
 		// Hash algorithms
 		"MD5", "SHA-256", "CRC-32")
 
+	// Close the hasher after use.
+	defer h.Close()
+
 	// Compute the hashes of the strings.
-	checksums, n, _ := h.Compute(context.Background(), false)
+	checksums, n, _ := h.Compute(context.Background())
 
 	// Show the checksums and count of written bytes.
 	for alg, checksum := range checksums {
@@ -54,6 +57,9 @@ func ExampleFromUrl() {
 	// The total content length of the URL will be returned if possible.
 	h, total, _ := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
 
+	// Close the hasher after use.
+	defer h.Close()
+
 	// Start a worker goroutine to compute hashes of content of the URL.
 	// It will return a channel used to read the events(iocopy.Event).
 	ch := h.Start(
@@ -62,9 +68,7 @@ func ExampleFromUrl() {
 		// Buffer size
 		16*1024*1024,
 		// Interval to report written bytes
-		500*time.Millisecond,
-		// Try closing reader on exit
-		true)
+		500*time.Millisecond)
 
 	// Read the events from the channel.
 	for event := range ch {
@@ -131,7 +135,10 @@ func ExampleFromUrlWithStates() {
 	// Stage 1.
 	// Create a hasher from URL.
 	// The total content length of the URL will be returned if possible.
-	h, total, _ := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
+	h1, total, _ := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
+
+	// Close the hasher after use.
+	defer h1.Close()
 
 	// create a context.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -139,15 +146,13 @@ func ExampleFromUrlWithStates() {
 
 	// Start a worker goroutine to compute hashes of content of the URL.
 	// It will return a channel used to read the events(iocopy.Event).
-	ch := h.Start(
+	ch := h1.Start(
 		// Context
 		ctx,
 		// Buffer size
 		16*1024*1024,
 		// Interval to report written bytes
-		500*time.Millisecond,
-		// Try closing reader on exit
-		true)
+		500*time.Millisecond)
 
 	// Read the events from the channel.
 	for event := range ch {
@@ -172,7 +177,7 @@ func ExampleFromUrlWithStates() {
 			computed = ev.Written()
 
 			// Save the hashes states.
-			states, _ = h.States()
+			states, _ = h1.States()
 
 		case *iocopy.EventError:
 			// an error occured.
@@ -188,12 +193,12 @@ func ExampleFromUrlWithStates() {
 	// (2). iocopy.EventStop received.
 	// (3). iocopy.EventOK received.
 	// The for-range loop exits when the channel is closed.
-	log.Printf("Stage 1: h.Start() gouroutine exited and the event channel is closed")
+	log.Printf("Stage 1: h1.Start() gouroutine exited and the event channel is closed")
 
 	// Stage 2.
 	// Create a hasher from URL with number of computed bytes and
 	// saved states to continue to compute hashes.
-	h, total, _ = hasher.FromUrlWithStates(
+	h2, total, _ := hasher.FromUrlWithStates(
 		// URL
 		downloadURL,
 		// Number of computed bytes
@@ -201,17 +206,18 @@ func ExampleFromUrlWithStates() {
 		// States of hashes
 		states)
 
+	// Close the hasher after use.
+	defer h2.Close()
+
 	// Start a worker goroutine to compute hashes of content of the URL.
 	// It will return a channel used to read the events(iocopy.Event).
-	ch = h.Start(
+	ch = h2.Start(
 		// Context
 		context.Background(),
 		// Buffer size
 		16*1024*1024,
 		// Interval to report written bytes
-		500*time.Millisecond,
-		// Try closing reader on exit
-		true)
+		500*time.Millisecond)
 
 	newComputed := int64(0)
 
@@ -243,11 +249,11 @@ func ExampleFromUrlWithStates() {
 			log.Printf("on EventOK: %v/%v bytes written(%.2f%%)", newComputed, total, percent)
 
 			// Get the final SHA-256 checksum of the remote file.
-			checksums := h.Checksums()
+			checksums := h2.Checksums()
 			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
 
 			// Verify the SHA-256 checksum.
-			matched, alg := h.Match("10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb")
+			matched, alg := h2.Match("10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb")
 			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
 		}
 	}
@@ -257,7 +263,7 @@ func ExampleFromUrlWithStates() {
 	// (2). iocopy.EventStop received.
 	// (3). iocopy.EventOK received.
 	// The for-range loop exits when the channel is closed.
-	log.Printf("Stage 2: h.Start() gouroutine exited and the event channel is closed")
+	log.Printf("Stage 2: h2.Start() gouroutine exited and the event channel is closed")
 
 	// Output:
 	// SHA-256:

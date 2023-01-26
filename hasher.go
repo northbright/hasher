@@ -351,6 +351,15 @@ func (h *Hasher) Match(checksum string) (matched bool, matchedHashAlg string) {
 	return false, ""
 }
 
+// Close closes the hasher's reader if it's also an io.ReadCloser.
+// It's not goroutine-safe and should be called only if computing is done / stopped.
+func (h *Hasher) Close() {
+	// Try closing the reader.
+	if closer, ok := h.r.(io.ReadCloser); ok {
+		closer.Close()
+	}
+}
+
 // Start starts a worker goroutine to read data and compute hashes.
 // It wraps the basic iocopy.Start fucntion.
 // See https://pkg.go.dev/github.com/northbright/iocopy#Start for more information.
@@ -358,9 +367,6 @@ func (h *Hasher) Match(checksum string) (matched bool, matchedHashAlg string) {
 // bufSize: size of the buffer. It'll create a buffer in the new goroutine according to the buffer size.
 // interval: interval to send EventWritten event to the channel.
 // You may set it to DefaultInterval.
-// tryClosingReaderOnExit: if need to try closing the reader on goroutine exit.
-// Caller may set it to true when src is an io.ReadCloser.
-// e.g. http.Response.Body, os.File.
 //
 // It returns a channel to receive IO copy events.
 // There're 4 types of events will be send to the channel:
@@ -384,8 +390,7 @@ func (h *Hasher) Match(checksum string) (matched bool, matchedHashAlg string) {
 func (h *Hasher) Start(
 	ctx context.Context,
 	bufSize int64,
-	interval time.Duration,
-	tryClosingReaderOnExit bool) <-chan iocopy.Event {
+	interval time.Duration) <-chan iocopy.Event {
 
 	var (
 		writers []io.Writer
@@ -400,19 +405,17 @@ func (h *Hasher) Start(
 	w := io.MultiWriter(writers...)
 
 	// Return an event channel and start to copy.
-	return iocopy.Start(ctx, w, h.r, bufSize, interval, tryClosingReaderOnExit)
+	return iocopy.Start(ctx, w, h.r, bufSize, interval)
 }
 
 // Compute returns the checksums and number of written(hashed) bytes.
 // It blocks the caller's goroutine until the computing is done.
 func (h *Hasher) Compute(
-	ctx context.Context,
-	tryClosingReaderOnExit bool) (checksums map[string][]byte, written int64, err error) {
+	ctx context.Context) (checksums map[string][]byte, written int64, err error) {
 	ch := h.Start(
 		ctx,
 		iocopy.DefaultBufSize,
-		iocopy.DefaultInterval,
-		tryClosingReaderOnExit)
+		iocopy.DefaultInterval)
 
 	for event := range ch {
 		switch ev := event.(type) {
