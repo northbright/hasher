@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -109,6 +110,10 @@ func New(r io.Reader, hashAlgs ...string) (*Hasher, error) {
 	return &Hasher{r: r, hashes: hashes}, nil
 }
 
+// NewWithStates creates a new Hasher with saved states.
+// r: io.Reader to read data from. The offset to read at should match the saved states.
+// states: a map stores the saved states.
+// The key is the hash algorithm and the value is the state in byte slice.
 func NewWithStates(r io.Reader, states map[string][]byte) (*Hasher, error) {
 	var (
 		algs []string
@@ -142,6 +147,9 @@ func NewWithStates(r io.Reader, states map[string][]byte) (*Hasher, error) {
 	return h, nil
 }
 
+// FromStrings creates a new Hasher to compute hashes for the strings.
+// strs: string slice to compute hashes.
+// hashAlgs: hash algorithms.
 func FromStrings(strs []string, hashAlgs ...string) (*Hasher, error) {
 	var (
 		readers []io.Reader
@@ -156,18 +164,33 @@ func FromStrings(strs []string, hashAlgs ...string) (*Hasher, error) {
 	return New(r, hashAlgs...)
 }
 
+// FromString creates a new Hasher to compute hashes for the string.
+// str: string to compute hashes.
+// hashAlgs: hash algorithms.
 func FromString(str string, hashAlgs ...string) (*Hasher, error) {
 	return FromStrings([]string{str}, hashAlgs...)
 }
 
+// FromUrlWithStates creates a new Hasher to contiune to compute hashes for the URL.
+// url: URL to compute hashes.
+// computed: number of computed(hashed) bytes. It should match the saved states.
+// states: a map stores the saved states.
+// The key is the hash algorithm and the value is the state in byte slice.
 func FromUrlWithStates(
 	url string,
 	computed int64,
-	states map[string][]byte,
-	hashAlgs ...string) (h *Hasher, total int64, err error) {
+	states map[string][]byte) (h *Hasher, total int64, err error) {
 
 	if computed < 0 {
 		return nil, 0, ErrIncorrectComputedSize
+	} else if computed == 0 {
+		var hashAlgs []string
+
+		for alg, _ := range states {
+			hashAlgs = append(hashAlgs, alg)
+		}
+
+		return FromUrl(url, hashAlgs...)
 	}
 
 	// Get remote content length and
@@ -185,63 +208,82 @@ func FromUrlWithStates(
 	}
 
 	// Load states if computed > 0.
-	if computed > 0 {
-		if !isRangeSupported {
-			return nil, 0, ErrRangeNotSupported
-		}
-
-		// Set range header.
-		bytesRange := fmt.Sprintf("bytes=%d-", computed)
-		req.Header.Add("range", bytesRange)
-
-		// Do HTTP request.
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		// Check if status code is 206.
-		if resp.StatusCode != 206 {
-			return nil, 0, ErrStatusCodeIsNot206
-		}
-
-		// Create a hasher with states.
-		h, err := NewWithStates(resp.Body, states)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		return h, total, nil
-	} else {
-		// computed == 0, read from the start of the response body.
-
-		// Do HTTP request.
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		// Check if status code is 200.
-		if resp.StatusCode != 200 {
-			return nil, 0, ErrStatusCodeIsNot200
-		}
-
-		// Create a hasher.
-		h, err := New(resp.Body, hashAlgs...)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		return h, total, nil
+	if !isRangeSupported {
+		return nil, 0, ErrRangeNotSupported
 	}
+
+	// Set range header.
+	bytesRange := fmt.Sprintf("bytes=%d-", computed)
+	req.Header.Add("range", bytesRange)
+
+	// Do HTTP request.
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Check if status code is 206.
+	if resp.StatusCode != 206 {
+		return nil, 0, ErrStatusCodeIsNot206
+	}
+
+	// Create a hasher with states.
+	h, err = NewWithStates(resp.Body, states)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return h, total, nil
 }
 
+// FromUrl creates a new Hasher to contiune to compute hashes for the URL.
+// url: URL to compute hashes.
+// hashAlgs: hash algorithms.
 func FromUrl(
 	url string,
 	hashAlgs ...string) (h *Hasher, total int64, err error) {
-	return FromUrlWithStates(url, 0, nil, hashAlgs...)
+
+	// Get remote content length and
+	// check if range header is supported by the server.
+	total, _, err = httputil.ContentLength(url)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Create a HTTP client.
+	client := http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Do HTTP request.
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Check if status code is 200.
+	if resp.StatusCode != 200 {
+		return nil, 0, ErrStatusCodeIsNot200
+	}
+
+	// Create a hasher.
+	h, err = New(resp.Body, hashAlgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return h, total, nil
 }
 
+// States returns a map stores the latest states of hashes. The key is the hash algorithm and the value is the state in byte slice.
+// The states are used to continue to compute hashes later.
+// It's not goroutine-safe and should be called only if iocopy.EventStop received.
+// Usage:
+// 1. Call Hasher.Start with a context and read events from the channel.
+// 2. Cancel the context or the deadline expires.
+// 3. Receive iocopy.EventStop event from the channel and then call States.
 func (h *Hasher) States() (map[string][]byte, error) {
 	var states = make(map[string][]byte)
 
@@ -262,6 +304,12 @@ func (h *Hasher) States() (map[string][]byte, error) {
 	return states, nil
 }
 
+// Checksums returns the checksums of hash algorithms.
+// The checksums are stored in a map(key: algorithm, value: checksum in byte slice).
+// It's not goroutine-safe and should be called only if iocopy.EventOK received.
+// Usage:
+// 1. Call Hasher.Start with a context and read events from the channel.
+// 2. Receive iocopy.EventOK event from the channel and then call Checksums.
 func (h *Hasher) Checksums() map[string][]byte {
 	var checksums = make(map[string][]byte)
 
@@ -270,6 +318,37 @@ func (h *Hasher) Checksums() map[string][]byte {
 	}
 
 	return checksums
+}
+
+// ChecksumStrings returns the checksum strings.
+func (h *Hasher) ChecksumStrings() map[string]string {
+	var checksums = make(map[string]string)
+
+	for alg, hash := range h.hashes {
+		checksums[alg] = hex.EncodeToString(hash.Sum(nil))
+	}
+
+	return checksums
+}
+
+// Match checks if the given checksum string matches any hash alogrithm's checksum.
+// When the checksum string matches, it return true and the matched algorithm.
+func (h *Hasher) Match(checksum string) (matched bool, matchedHashAlg string) {
+	// Create a map which key is checksum hex string and value is hash algorithm.
+	var m = make(map[string]string)
+
+	for alg, hash := range h.hashes {
+		m[hex.EncodeToString(hash.Sum(nil))] = alg
+	}
+
+	// Make sure use lower string to compare.
+	checksum = strings.ToLower(checksum)
+
+	if alg, ok := m[checksum]; ok {
+		return true, alg
+	}
+
+	return false, ""
 }
 
 // Start starts a worker goroutine to read data and compute hashes.
@@ -324,6 +403,8 @@ func (h *Hasher) Start(
 	return iocopy.Start(ctx, w, h.r, bufSize, interval, tryClosingReaderOnExit)
 }
 
+// Compute returns the checksums and number of written(hashed) bytes.
+// It blocks the caller's goroutine until the computing is done.
 func (h *Hasher) Compute(
 	ctx context.Context,
 	tryClosingReaderOnExit bool) (checksums map[string][]byte, written int64, err error) {
