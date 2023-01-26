@@ -20,6 +20,7 @@ hasher is a [Golang](https://golang.org) package provides functions to compute h
 * `SHA-1`
 * `SHA-256`
 * `SHA-512`
+* `CRC-32`
 
 ## Docs
 * <https://pkg.go.dev/github.com/northbright/hasher>

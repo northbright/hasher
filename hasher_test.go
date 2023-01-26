@@ -20,9 +20,13 @@ func ExampleFromStrings() {
 	)
 
 	// Create a hasher with given hash algorithms.
-	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512".
+	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512", "CRC-32".
 	// Call SupportedHashAlgs to get all available hash algorithms.
-	h, _ := hasher.FromStrings([]string{input1, input2}, "MD5", "SHA-256")
+	h, _ := hasher.FromStrings(
+		// String slice
+		[]string{input1, input2},
+		// Hash algorithms
+		"MD5", "SHA-256", "CRC-32")
 
 	// Compute the hashes of the strings.
 	checksums, n, _ := h.Compute(context.Background(), false)

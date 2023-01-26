@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"hash/crc32"
 	"io"
 	"net/http"
 	"sort"
@@ -20,12 +21,19 @@ import (
 	"github.com/northbright/iocopy"
 )
 
+// crc32NewIEEE is a wrapper of crc32.NewIEEE.
+// Make it possible to return a hash.Hash instead of hash.Hash32.
+func crc32NewIEEE() hash.Hash {
+	return hash.Hash(crc32.NewIEEE())
+}
+
 var (
 	hashAlgsToNewFuncs = map[string]func() hash.Hash{
 		"MD5":     md5.New,
 		"SHA-1":   sha1.New,
 		"SHA-256": sha256.New,
 		"SHA-512": sha512.New,
+		"CRC-32":  crc32NewIEEE,
 	}
 
 	// ErrUnSupportedHashAlg indicates that the hash algorithm is not supported.
