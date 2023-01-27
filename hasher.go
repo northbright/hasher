@@ -14,6 +14,7 @@ import (
 	"hash/crc32"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -268,6 +269,87 @@ func FromUrlWithStates(
 
 	// Create a hasher with states.
 	h, err = NewWithStates(resp.Body, states)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return h, total, nil
+}
+
+// FromFile creates a new Hasher to contiune to compute hashes for the file.
+// file: file path to compute hashes.
+// hashAlgs: hash algorithms.
+func FromFile(
+	file string,
+	hashAlgs ...string) (h *Hasher, total int64, err error) {
+
+	// Open file.
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Get file info.
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Get file size.
+	total = fi.Size()
+
+	// Create a hasher.
+	h, err = New(f, hashAlgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return h, total, nil
+}
+
+// FromFileWithStates creates a new Hasher to contiune to compute hashes for the file.
+// file: file path to compute hashes.
+// computed: number of computed(hashed) bytes. It should match the saved states.
+// states: a map stores the saved states.
+// The key is the hash algorithm and the value is the state in byte slice.
+func FromFileWithStates(
+	file string,
+	computed int64,
+	states map[string][]byte) (h *Hasher, total int64, err error) {
+
+	// Check states.
+	if states == nil {
+		return nil, 0, ErrNoStates
+	}
+
+	// Check number of computed bytes.
+	if computed <= 0 {
+		return nil, 0, ErrIncorrectComputedSize
+	}
+
+	// Open file.
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Get file info.
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Get file size.
+	total = fi.Size()
+
+	// Set offset.
+	_, err = f.Seek(computed, 0)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Create a hasher with states.
+	h, err = NewWithStates(f, states)
 	if err != nil {
 		return nil, 0, err
 	}
