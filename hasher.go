@@ -171,6 +171,47 @@ func FromString(str string, hashAlgs ...string) (*Hasher, error) {
 	return FromStrings([]string{str}, hashAlgs...)
 }
 
+// FromUrl creates a new Hasher to contiune to compute hashes for the URL.
+// url: URL to compute hashes.
+// hashAlgs: hash algorithms.
+func FromUrl(
+	url string,
+	hashAlgs ...string) (h *Hasher, total int64, err error) {
+
+	// Get remote content length and
+	// check if range header is supported by the server.
+	total, _, err = httputil.ContentLength(url)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Create a HTTP client.
+	client := http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Do HTTP request.
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Check if status code is 200.
+	if resp.StatusCode != 200 {
+		return nil, 0, ErrStatusCodeIsNot200
+	}
+
+	// Create a hasher.
+	h, err = New(resp.Body, hashAlgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return h, total, nil
+}
+
 // FromUrlWithStates creates a new Hasher to contiune to compute hashes for the URL.
 // url: URL to compute hashes.
 // computed: number of computed(hashed) bytes. It should match the saved states.
@@ -181,16 +222,14 @@ func FromUrlWithStates(
 	computed int64,
 	states map[string][]byte) (h *Hasher, total int64, err error) {
 
-	if computed < 0 {
+	// Check states.
+	if states == nil {
+		return nil, 0, ErrNoStates
+	}
+
+	// Check number of computed bytes.
+	if computed <= 0 {
 		return nil, 0, ErrIncorrectComputedSize
-	} else if computed == 0 {
-		var hashAlgs []string
-
-		for alg, _ := range states {
-			hashAlgs = append(hashAlgs, alg)
-		}
-
-		return FromUrl(url, hashAlgs...)
 	}
 
 	// Get remote content length and
@@ -229,47 +268,6 @@ func FromUrlWithStates(
 
 	// Create a hasher with states.
 	h, err = NewWithStates(resp.Body, states)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return h, total, nil
-}
-
-// FromUrl creates a new Hasher to contiune to compute hashes for the URL.
-// url: URL to compute hashes.
-// hashAlgs: hash algorithms.
-func FromUrl(
-	url string,
-	hashAlgs ...string) (h *Hasher, total int64, err error) {
-
-	// Get remote content length and
-	// check if range header is supported by the server.
-	total, _, err = httputil.ContentLength(url)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// Create a HTTP client.
-	client := http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// Do HTTP request.
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	// Check if status code is 200.
-	if resp.StatusCode != 200 {
-		return nil, 0, ErrStatusCodeIsNot200
-	}
-
-	// Create a hasher.
-	h, err = New(resp.Body, hashAlgs...)
 	if err != nil {
 		return nil, 0, err
 	}
