@@ -1,4 +1,4 @@
-module github.com/northbright/hasher
+module github.com/northbright/hasher/v2
 
 go 1.19
 
