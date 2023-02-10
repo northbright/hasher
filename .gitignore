@@ -48,5 +48,8 @@ config.json
 # PDF
 !*.pdf
 
+# CSV
+!*.csv
+
 # Vue dist
 /dist
