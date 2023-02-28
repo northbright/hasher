@@ -14,6 +14,25 @@ import (
 	"github.com/northbright/iocopy"
 )
 
+func ExampleSupportedHashAlgs() {
+	algs := hasher.SupportedHashAlgs()
+	l := len(algs)
+
+	for i, alg := range algs {
+		fmt.Printf("%v: %v", i, alg)
+		if i != l-1 {
+			fmt.Printf("\n")
+		}
+	}
+
+	// Output:
+	// 0: CRC-32
+	// 1: MD5
+	// 2: SHA-1
+	// 3: SHA-256
+	// 4: SHA-512
+}
+
 func ExampleFromStrings() {
 	// Example of computing strings hash.
 	// Compute the SHA-256 hash of the strings in offical example:
