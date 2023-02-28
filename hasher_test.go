@@ -52,10 +52,9 @@ func ExampleFromStrings() {
 }
 
 func ExampleFromUrl() {
-	// URL of Ubuntu release.
-	// SHA-256:
-	// 10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb
-	downloadURL := "https://www.releases.ubuntu.com/jammy/ubuntu-22.04.1-live-server-amd64.iso"
+	// URL of remote file.
+	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
+	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
 	// Create a hasher from URL.
 	// The total content length of the URL will be returned if possible.
@@ -74,7 +73,7 @@ func ExampleFromUrl() {
 		// Context
 		context.Background(),
 		// Buffer size
-		16*1024*1024,
+		32*1024*1024,
 		// Interval to report written bytes
 		500*time.Millisecond)
 
@@ -110,7 +109,7 @@ func ExampleFromUrl() {
 			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
 
 			// Verify the SHA-256 checksum.
-			matched, alg := h.Match("10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb")
+			matched, alg := h.Match(expectedSHA256)
 			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
 		}
 	}
@@ -124,7 +123,7 @@ func ExampleFromUrl() {
 
 	// Output:
 	// SHA-256:
-	// 10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb
+	// 9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251
 	// matched: true, matched hash algorithm: SHA-256
 }
 
@@ -135,10 +134,9 @@ func ExampleFromUrlWithStates() {
 	// computed is the number of bytes has been written / hashed.
 	var computed int64 = 0
 
-	// URL of Ubuntu release.
-	// SHA-256:
-	// 10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb
-	downloadURL := "https://www.releases.ubuntu.com/jammy/ubuntu-22.04.1-live-server-amd64.iso"
+	// URL of remote file.
+	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
+	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
 	// Stage 1.
 	// Create a hasher from URL.
@@ -162,7 +160,7 @@ func ExampleFromUrlWithStates() {
 		// Context
 		ctx,
 		// Buffer size
-		16*1024*1024,
+		32*1024*1024,
 		// Interval to report written bytes
 		500*time.Millisecond)
 
@@ -185,10 +183,8 @@ func ExampleFromUrlWithStates() {
 			// context's deadline exceeded.
 			log.Printf("on EventStop: %v", ev.Err())
 
-			// Save the number of computed bytes.
+			// Save the number of computed bytes and states.
 			computed = ev.Written()
-
-			// Save the hashes states.
 			states, _ = h1.States()
 
 		case *iocopy.EventError:
@@ -197,6 +193,10 @@ func ExampleFromUrlWithStates() {
 			log.Printf("on EventError: %v", ev.Err())
 
 		case *iocopy.EventOK:
+			log.Printf("on EventOK before cancel() is called")
+			// Save the number of computed bytes and states.
+			computed = ev.Written()
+			states, _ = h1.States()
 		}
 	}
 
@@ -232,7 +232,7 @@ func ExampleFromUrlWithStates() {
 		// Context
 		context.Background(),
 		// Buffer size
-		16*1024*1024,
+		32*1024*1024,
 		// Interval to report written bytes
 		500*time.Millisecond)
 
@@ -270,7 +270,7 @@ func ExampleFromUrlWithStates() {
 			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
 
 			// Verify the SHA-256 checksum.
-			matched, alg := h2.Match("10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb")
+			matched, alg := h2.Match(expectedSHA256)
 			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
 		}
 	}
@@ -284,18 +284,17 @@ func ExampleFromUrlWithStates() {
 
 	// Output:
 	// SHA-256:
-	// 10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb
+	// 9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251
 	// matched: true, matched hash algorithm: SHA-256
 }
 
 func ExampleFromFile() {
-	// URL of Ubuntu release.
-	// SHA-256:
-	// 10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb
-	downloadURL := "https://www.releases.ubuntu.com/jammy/ubuntu-22.04.1-live-server-amd64.iso"
+	// URL of remote file.
+	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
+	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
 	// Download the file.
-	file := filepath.Join(os.TempDir(), "ubuntu-22.04.1-live-server-amd64.iso")
+	file := filepath.Join(os.TempDir(), "go1.20.1.darwin-amd64.pkg")
 	log.Printf("file: %v", file)
 
 	f, err := os.Create(file)
@@ -332,7 +331,7 @@ func ExampleFromFile() {
 		// Src
 		resp.Body,
 		// Buffer
-		32*1024,
+		32*1024*1024,
 		// Interval
 		800*time.Millisecond)
 
@@ -376,7 +375,11 @@ func ExampleFromFile() {
 	log.Printf("IO copy gouroutine exited and the event channel is closed")
 
 	// Create a hasher from file.
-	h, total, _ := hasher.FromFile(file, "MD5", "SHA-256")
+	h, total, err := hasher.FromFile(file, "MD5", "SHA-256")
+	if err != nil {
+		log.Printf("FromFile() error: %v", err)
+		return
+	}
 
 	// Close the hasher after use.
 	defer h.Close()
@@ -387,7 +390,7 @@ func ExampleFromFile() {
 		// Context
 		context.Background(),
 		// Buffer size
-		16*1024*1024,
+		32*1024*1024,
 		// Interval to report written bytes
 		500*time.Millisecond)
 
@@ -424,7 +427,7 @@ func ExampleFromFile() {
 			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
 
 			// Verify the SHA-256 checksum.
-			matched, alg := h.Match("10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb")
+			matched, alg := h.Match(expectedSHA256)
 			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
 		}
 	}
@@ -438,7 +441,7 @@ func ExampleFromFile() {
 
 	// Output:
 	// SHA-256:
-	// 10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb
+	// 9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251
 	// matched: true, matched hash algorithm: SHA-256
 }
 
@@ -449,13 +452,12 @@ func ExampleFromFileWithStates() {
 	// computed is the number of bytes has been written / hashed.
 	var computed int64 = 0
 
-	// URL of Ubuntu release.
-	// SHA-256:
-	// 10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb
-	downloadURL := "https://www.releases.ubuntu.com/jammy/ubuntu-22.04.1-live-server-amd64.iso"
+	// URL of remote file.
+	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
+	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
 	// Download the file.
-	file := filepath.Join(os.TempDir(), "ubuntu-22.04.1-live-server-amd64.iso")
+	file := filepath.Join(os.TempDir(), "go1.20.1.darwin-amd64.pkg")
 	log.Printf("file: %v", file)
 
 	f, err := os.Create(file)
@@ -492,7 +494,7 @@ func ExampleFromFileWithStates() {
 		// Src
 		resp.Body,
 		// Buffer
-		32*1024,
+		32*1024*1024,
 		// Interval
 		800*time.Millisecond)
 
@@ -537,7 +539,11 @@ func ExampleFromFileWithStates() {
 
 	// Stage 1.
 	// Create a hasher from file.
-	h1, total, _ := hasher.FromFile(file, "MD5", "SHA-256")
+	h1, total, err := hasher.FromFile(file, "MD5", "SHA-256")
+	if err != nil {
+		log.Printf("FromFile() error: %v", err)
+		return
+	}
 
 	// Close the hasher after use.
 	defer h1.Close()
@@ -552,7 +558,7 @@ func ExampleFromFileWithStates() {
 		// Context
 		ctx,
 		// Buffer size
-		16*1024*1024,
+		32*1024*1024,
 		// Interval to report written bytes
 		500*time.Millisecond)
 
@@ -575,10 +581,8 @@ func ExampleFromFileWithStates() {
 			// context's deadline exceeded.
 			log.Printf("on EventStop: %v", ev.Err())
 
-			// Save the number of computed bytes.
+			// Save the number of computed bytes and states.
 			computed = ev.Written()
-
-			// Save the hashes states.
 			states, _ = h1.States()
 
 		case *iocopy.EventError:
@@ -587,6 +591,10 @@ func ExampleFromFileWithStates() {
 			log.Printf("on EventError: %v", ev.Err())
 
 		case *iocopy.EventOK:
+			log.Printf("on EventOK before cancel() is called")
+			// Save the number of computed bytes and states.
+			computed = ev.Written()
+			states, _ = h1.States()
 		}
 	}
 
@@ -600,13 +608,17 @@ func ExampleFromFileWithStates() {
 	// Stage 2.
 	// Create a hasher from file with number of computed bytes and
 	// saved states to continue to compute hashes.
-	h2, total, _ := hasher.FromFileWithStates(
+	h2, total, err := hasher.FromFileWithStates(
 		// File path
 		file,
 		// Number of computed bytes
 		computed,
 		// States of hashes
 		states)
+	if err != nil {
+		log.Printf("FromFileWithStates() error: %v", err)
+		return
+	}
 
 	// Close the hasher after use.
 	defer h2.Close()
@@ -617,7 +629,7 @@ func ExampleFromFileWithStates() {
 		// Context
 		context.Background(),
 		// Buffer size
-		16*1024*1024,
+		32*1024*1024,
 		// Interval to report written bytes
 		500*time.Millisecond)
 
@@ -655,7 +667,7 @@ func ExampleFromFileWithStates() {
 			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
 
 			// Verify the SHA-256 checksum.
-			matched, alg := h2.Match("10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb")
+			matched, alg := h2.Match(expectedSHA256)
 			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
 		}
 	}
@@ -669,6 +681,6 @@ func ExampleFromFileWithStates() {
 
 	// Output:
 	// SHA-256:
-	// 10f19c5b2b8d6db711582e0e27f5116296c34fe4b313ba45f9b201a5007056cb
+	// 9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251
 	// matched: true, matched hash algorithm: SHA-256
 }
