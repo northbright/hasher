@@ -59,7 +59,11 @@ func ExampleFromUrl() {
 
 	// Create a hasher from URL.
 	// The total content length of the URL will be returned if possible.
-	h, total, _ := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
+	h, total, err := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
+	if err != nil {
+		log.Printf("FromUrl() error: %v", err)
+		return
+	}
 
 	// Close the hasher after use.
 	defer h.Close()
@@ -139,7 +143,11 @@ func ExampleFromUrlWithStates() {
 	// Stage 1.
 	// Create a hasher from URL.
 	// The total content length of the URL will be returned if possible.
-	h1, total, _ := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
+	h1, total, err := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
+	if err != nil {
+		log.Printf("FromUrl() error: %v", err)
+		return
+	}
 
 	// Close the hasher after use.
 	defer h1.Close()
@@ -202,13 +210,18 @@ func ExampleFromUrlWithStates() {
 	// Stage 2.
 	// Create a hasher from URL with number of computed bytes and
 	// saved states to continue to compute hashes.
-	h2, total, _ := hasher.FromUrlWithStates(
+	h2, total, err := hasher.FromUrlWithStates(
 		// URL
 		downloadURL,
 		// Number of computed bytes
 		computed,
 		// States of hashes
 		states)
+
+	if err != nil {
+		log.Printf("FromUrlWithStates() error: %v", err)
+		return
+	}
 
 	// Close the hasher after use.
 	defer h2.Close()
