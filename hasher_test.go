@@ -212,10 +212,19 @@ func ExampleFromUrlWithStates() {
 			log.Printf("on EventError: %v", ev.Err())
 
 		case *iocopy.EventOK:
+			// Computing is DONE before cancel() is called.
+			// No need to save / load the states and
+			// continue to compute the hashes.
 			log.Printf("on EventOK before cancel() is called")
-			// Save the number of computed bytes and states.
-			computed = ev.Written()
-			states, _ = h1.States()
+
+			// Get the final SHA-256 checksum of the remote file.
+			checksums := h1.Checksums()
+			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
+
+			// Verify the SHA-256 checksum.
+			matched, alg := h1.Match(expectedSHA256)
+			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
+			return
 		}
 	}
 

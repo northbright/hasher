@@ -293,17 +293,17 @@ func FromUrlWithStates(
 	}
 
 	// Check if status code is 206.
-	if resp.StatusCode == 206 {
-		// Create a hasher with states.
-		// Need to close the reader when call Hasher.Close.
-		h, err = newHasherWithStates(resp.Body, true, states)
-		if err != nil {
-			return nil, 0, err
-		}
-		return h, total, nil
-	} else {
+	if resp.StatusCode != 206 {
 		return nil, 0, ErrStatusCodeIsNot206
 	}
+
+	// Create a hasher with states.
+	// Need to close the reader when call Hasher.Close.
+	h, err = newHasherWithStates(resp.Body, true, states)
+	if err != nil {
+		return nil, 0, err
+	}
+	return h, total, nil
 }
 
 // FromFile creates a new Hasher to compute the hashes for the file.
