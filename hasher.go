@@ -13,7 +13,6 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -63,8 +62,8 @@ var (
 	// Status code is not 200.
 	ErrStatusCodeIsNot200 = errors.New("status code is not 200")
 
-	// Status code is not 200 or 206.
-	ErrStatusCodeIsNot200or206 = errors.New("status code is not 200 or 206")
+	// Status code is not 206.
+	ErrStatusCodeIsNot206 = errors.New("status code is not 206")
 )
 
 // SupportedHashAlgs returns supported hash algorithms of this package.
@@ -293,20 +292,18 @@ func FromUrlWithStates(
 		return nil, 0, err
 	}
 
-	// Check if status code is 200 or 206.
-	if resp.StatusCode != 200 && resp.StatusCode != 206 {
-		log.Printf("status code: %v", resp.StatusCode)
-		return nil, 0, ErrStatusCodeIsNot200or206
+	// Check if status code is 206.
+	if resp.StatusCode == 206 {
+		// Create a hasher with states.
+		// Need to close the reader when call Hasher.Close.
+		h, err = newHasherWithStates(resp.Body, true, states)
+		if err != nil {
+			return nil, 0, err
+		}
+		return h, total, nil
+	} else {
+		return nil, 0, ErrStatusCodeIsNot206
 	}
-
-	// Create a hasher with states.
-	// Need to close the reader when call Hasher.Close.
-	h, err = newHasherWithStates(resp.Body, true, states)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return h, total, nil
 }
 
 // FromFile creates a new Hasher to compute the hashes for the file.
