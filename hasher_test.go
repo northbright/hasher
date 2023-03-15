@@ -45,7 +45,7 @@ func ExampleFromStrings() {
 	// Create a hasher with given hash algorithms.
 	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512", "CRC-32".
 	// Call SupportedHashAlgs to get all available hash algorithms.
-	h, _ := hasher.FromStrings(
+	h, total, _ := hasher.FromStrings(
 		// String slice
 		[]string{input1, input2},
 		// Hash algorithms
@@ -61,7 +61,7 @@ func ExampleFromStrings() {
 	for alg, checksum := range checksums {
 		log.Printf("%s: %x", alg, checksum)
 	}
-	log.Printf("%d bytes written", n)
+	log.Printf("%d bytes written(total: %v)", n, total)
 
 	// Output SHA-256 checksum.
 	fmt.Printf("%x", checksums["SHA-256"])

@@ -174,24 +174,26 @@ func (h *Hasher) Close() {
 // FromStrings creates a new Hasher to compute the hashes for the strings.
 // strs: string slice to compute hashes.
 // hashAlgs: hash algorithms.
-func FromStrings(strs []string, hashAlgs ...string) (*Hasher, error) {
+func FromStrings(strs []string, hashAlgs ...string) (h *Hasher, total int64, err error) {
 	var (
 		readers []io.Reader
 	)
 
 	for _, str := range strs {
 		readers = append(readers, strings.NewReader(str))
+		total += int64(len(str))
 	}
 
 	r := io.MultiReader(readers...)
 
-	return newHasher(r, false, hashAlgs...)
+	h, err = newHasher(r, false, hashAlgs...)
+	return h, total, err
 }
 
 // FromString creates a new Hasher to compute the hashes for the string.
 // str: string to compute hashes.
 // hashAlgs: hash algorithms.
-func FromString(str string, hashAlgs ...string) (*Hasher, error) {
+func FromString(str string, hashAlgs ...string) (h *Hasher, total int64, err error) {
 	return FromStrings([]string{str}, hashAlgs...)
 }
 
