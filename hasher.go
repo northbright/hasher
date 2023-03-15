@@ -82,7 +82,7 @@ func SupportedHashAlgs() []string {
 	return algs
 }
 
-// Hasher is used to compute hash algorithm checksums.
+// Hasher is used to compute the hash algorithm checksums.
 type Hasher struct {
 	r               io.Reader
 	needCloseReader bool
@@ -111,7 +111,7 @@ func newHasher(r io.Reader, needCloseReader bool, hashAlgs ...string) (*Hasher, 
 
 // New creates a new Hasher.
 // r: io.Reader to read data from.
-// hashAlgs: hash algorithms to compute checksums.
+// hashAlgs: hash algorithms to compute the checksums.
 func New(r io.Reader, hashAlgs ...string) (*Hasher, error) {
 	return newHasher(r, false, hashAlgs...)
 }
@@ -171,7 +171,7 @@ func (h *Hasher) Close() {
 	}
 }
 
-// FromStrings creates a new Hasher to compute hashes for the strings.
+// FromStrings creates a new Hasher to compute the hashes for the strings.
 // strs: string slice to compute hashes.
 // hashAlgs: hash algorithms.
 func FromStrings(strs []string, hashAlgs ...string) (*Hasher, error) {
@@ -188,14 +188,14 @@ func FromStrings(strs []string, hashAlgs ...string) (*Hasher, error) {
 	return newHasher(r, false, hashAlgs...)
 }
 
-// FromString creates a new Hasher to compute hashes for the string.
+// FromString creates a new Hasher to compute the hashes for the string.
 // str: string to compute hashes.
 // hashAlgs: hash algorithms.
 func FromString(str string, hashAlgs ...string) (*Hasher, error) {
 	return FromStrings([]string{str}, hashAlgs...)
 }
 
-// FromUrl creates a new Hasher to contiune to compute hashes for the URL.
+// FromUrl creates a new Hasher to compute the hashes for the URL.
 // url: URL to compute hashes.
 // hashAlgs: hash algorithms.
 func FromUrl(
@@ -239,8 +239,8 @@ func FromUrl(
 	return h, total, nil
 }
 
-// FromUrlWithStates creates a new Hasher to contiune to compute hashes for the URL.
-// url: URL to compute hashes.
+// FromUrlWithStates creates a new Hasher to contiune to compute the hashes for the URL.
+// url: URL to compute the hashes.
 // computed: number of computed(hashed) bytes. It should match the saved states.
 // states: a map stores the saved states.
 // The key is the hash algorithm and the value is the state in byte slice.
@@ -305,8 +305,8 @@ func FromUrlWithStates(
 	return h, total, nil
 }
 
-// FromFile creates a new Hasher to contiune to compute hashes for the file.
-// file: file path to compute hashes.
+// FromFile creates a new Hasher to compute the hashes for the file.
+// file: file path to compute the hashes.
 // hashAlgs: hash algorithms.
 func FromFile(
 	file string,
@@ -338,8 +338,8 @@ func FromFile(
 	return h, total, nil
 }
 
-// FromFileWithStates creates a new Hasher to contiune to compute hashes for the file.
-// file: file path to compute hashes.
+// FromFileWithStates creates a new Hasher to contiune to compute the hashes for the file.
+// file: file path to compute the hashes.
 // computed: number of computed(hashed) bytes. It should match the saved states.
 // states: a map stores the saved states.
 // The key is the hash algorithm and the value is the state in byte slice.
@@ -390,8 +390,8 @@ func FromFileWithStates(
 	return h, total, nil
 }
 
-// States returns a map stores the latest states of hashes. The key is the hash algorithm and the value is the state in byte slice.
-// The states are used to continue to compute hashes later.
+// States returns a map stores the latest states of the hashes. The key is the hash algorithm and the value is the state in a byte slice.
+// The states are used to continue to compute the hashes later.
 // It's not goroutine-safe and should be called only if iocopy.EventStop received.
 // Usage:
 // 1. Call Hasher.Start with a context and read events from the channel.
@@ -417,8 +417,8 @@ func (h *Hasher) States() (map[string][]byte, error) {
 	return states, nil
 }
 
-// Checksums returns the checksums of hash algorithms.
-// The checksums are stored in a map(key: algorithm, value: checksum in byte slice).
+// Checksums returns the checksums of the hash algorithms.
+// The checksums are stored in a map(key: algorithm, value: checksum in a byte slice).
 // It's not goroutine-safe and should be called only if iocopy.EventOK received.
 // Usage:
 // 1. Call Hasher.Start with a context and read events from the channel.
@@ -464,7 +464,7 @@ func (h *Hasher) Match(checksum string) (matched bool, matchedHashAlg string) {
 	return false, ""
 }
 
-// Start starts a worker goroutine to read data and compute hashes.
+// Start starts a worker goroutine to read data and compute the hashes.
 // It wraps the basic iocopy.Start fucntion.
 // See https://pkg.go.dev/github.com/northbright/iocopy#Start for more information.
 // ctx: context.Context.
