@@ -13,6 +13,7 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -294,6 +295,7 @@ func FromUrlWithStates(
 
 	// Check if status code is 200 or 206.
 	if resp.StatusCode != 200 && resp.StatusCode != 206 {
+		log.Printf("status code: %v", resp.StatusCode)
 		return nil, 0, ErrStatusCodeIsNot200or206
 	}
 
