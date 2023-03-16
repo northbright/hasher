@@ -3,6 +3,7 @@ package hasher_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -31,6 +32,69 @@ func ExampleSupportedHashAlgs() {
 	// 2: SHA-1
 	// 3: SHA-256
 	// 4: SHA-512
+}
+
+// eventHandler reads the events from channel and block caller's go-routine.
+// It updates and reports the progress of computing hashes.
+// It returns the number of the computed bytes and the saved states after
+// the channel is closed.
+// The event channel will be closed after:
+// (1). iocopy.EventError received.
+// (2). iocopy.EventStop received.
+// (3). iocopy.EventOK received.
+func eventHandler(
+	h *hasher.Hasher,
+	total int64,
+	previousComputed int64,
+	expectedSHA256 string,
+	ch <-chan iocopy.Event) (computed int64, states map[string][]byte) {
+	states = make(map[string][]byte)
+
+	// Read the events from the channel.
+	for event := range ch {
+		switch ev := event.(type) {
+		case *iocopy.EventWritten:
+			// n bytes have been written successfully.
+			// Get the count of bytes.
+			computed = previousComputed + ev.Written()
+			percent := float32(float64(computed) / (float64(total) / float64(100)))
+			log.Printf("on EventWritten: %v/%v bytes written(%.2f%%)", computed, total, percent)
+
+		case *iocopy.EventStop:
+			// Context is canceled or
+			// context's deadline exceeded.
+
+			// Save the number of computed bytes and states.
+			computed = previousComputed + ev.Written()
+			states, _ = h.States()
+
+			log.Printf("on EventStop: %v, computed: %v", ev.Err(), computed)
+
+		case *iocopy.EventError:
+			// an error occured.
+			// Get the error.
+			log.Printf("on EventError: %v", ev.Err())
+
+		case *iocopy.EventOK:
+			// Get the total count of written bytes.
+			computed = previousComputed + ev.Written()
+			percent := float32(float64(computed) / (float64(total) / float64(100)))
+			log.Printf("on EventOK: %v/%v bytes written(%.2f%%)", computed, total, percent)
+
+			// Save the states.
+			states, _ = h.States()
+
+			// Get the final SHA-256 checksum of the remote file.
+			checksums := h.Checksums()
+			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
+
+			// Verify the SHA-256 checksum.
+			matched, alg := h.Match(expectedSHA256)
+			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
+		}
+	}
+
+	return computed, states
 }
 
 func ExampleFromStrings() {
@@ -71,11 +135,11 @@ func ExampleFromStrings() {
 }
 
 func ExampleFromUrl() {
-	// URL of remote file.
+	// URL of the remote file.
 	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
 	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
-	// Create a hasher from URL.
+	// Create a hasher from the URL.
 	// The total content length of the URL will be returned if possible.
 	h, total, err := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
 	if err != nil {
@@ -86,7 +150,7 @@ func ExampleFromUrl() {
 	// Close the hasher after use.
 	defer h.Close()
 
-	// Start a worker goroutine to compute hashes of content of the URL.
+	// Start a worker goroutine to compute the hashes of content of the URL.
 	// It will return a channel used to read the events(iocopy.Event).
 	ch := h.Start(
 		// Context
@@ -96,48 +160,19 @@ func ExampleFromUrl() {
 		// Interval to report written bytes
 		500*time.Millisecond)
 
-	// Read the events from the channel.
-	for event := range ch {
-		switch ev := event.(type) {
-		case *iocopy.EventWritten:
-			// n bytes have been written successfully.
-			// Get the count of bytes.
-			n := ev.Written()
-			percent := float32(float64(n) / (float64(total) / float64(100)))
-			log.Printf("on EventWritten: %v/%v bytes written(%.2f%%)", n, total, percent)
+	// Read the events from the events and block current go-routine.
+	eventHandler(
+		// Hasher
+		h,
+		// Number of total bytes to compute
+		total,
+		// Number of previous computed bytes
+		0,
+		// Expected SHA-256 Checksum.
+		expectedSHA256,
+		// Event Channel
+		ch)
 
-		case *iocopy.EventStop:
-			// Context is canceled or
-			// context's deadline exceeded.
-			log.Printf("on EventStop: %v", ev.Err())
-
-		case *iocopy.EventError:
-			// an error occured.
-			// Get the error.
-			log.Printf("on EventError: %v", ev.Err())
-
-		case *iocopy.EventOK:
-			// IO copy succeeded.
-			// Get the total count of written bytes.
-			n := ev.Written()
-			percent := float32(float64(n) / (float64(total) / float64(100)))
-			log.Printf("on EventOK: %v/%v bytes written(%.2f%%)", n, total, percent)
-
-			// Get the final SHA-256 checksum of the remote file.
-			checksums := h.Checksums()
-			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
-
-			// Verify the SHA-256 checksum.
-			matched, alg := h.Match(expectedSHA256)
-			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
-		}
-	}
-
-	// The event channel will be closed after:
-	// (1). iocopy.EventError received.
-	// (2). iocopy.EventStop received.
-	// (3). iocopy.EventOK received.
-	// The for-range loop exits when the channel is closed.
 	log.Printf("h.Start() gouroutine exited and the event channel is closed")
 
 	// Output:
@@ -147,18 +182,12 @@ func ExampleFromUrl() {
 }
 
 func ExampleFromUrlWithStates() {
-	// states is used to save hashes states.
-	var states = make(map[string][]byte)
-
-	// computed is the number of bytes has been written / hashed.
-	var computed int64 = 0
-
-	// URL of remote file.
+	// URL of the remote file.
 	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
 	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
 	// Stage 1.
-	// Create a hasher from URL.
+	// Create a hasher from the URL.
 	// The total content length of the URL will be returned if possible.
 	h1, total, err := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
 	if err != nil {
@@ -173,7 +202,7 @@ func ExampleFromUrlWithStates() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start a worker goroutine to compute hashes of content of the URL.
+	// Start a worker goroutine to compute the hashes of content of the URL.
 	// It will return a channel used to read the events(iocopy.Event).
 	ch := h1.Start(
 		// Context
@@ -181,63 +210,88 @@ func ExampleFromUrlWithStates() {
 		// Buffer size
 		32*1024*1024,
 		// Interval to report written bytes
-		500*time.Millisecond)
+		200*time.Millisecond)
 
-	// Read the events from the channel.
-	for event := range ch {
-		switch ev := event.(type) {
-		case *iocopy.EventWritten:
-			// n bytes have been written successfully.
-			// Get the count of bytes.
-			computed = ev.Written()
-			percent := float32(float64(computed) / (float64(total) / float64(100)))
-			log.Printf("on EventWritten: %v/%v bytes written(%.2f%%)", computed, total, percent)
-			// Stop computing hash when percent > 50%.
-			if percent > 50 {
-				cancel()
-			}
+	// Emulate: user cancelation.
+	// Set the timeout.
+	go func() {
+		<-time.After(500 * time.Millisecond)
+		cancel()
+	}()
 
-		case *iocopy.EventStop:
-			// Context is canceled or
-			// context's deadline exceeded.
-			log.Printf("on EventStop: %v", ev.Err())
+	// Read the events from the events and block current go-routine.
+	computed, states := eventHandler(
+		// Hasher
+		h1,
+		// Number of total bytes to compute
+		total,
+		// Number of previous computed bytes
+		0,
+		// Expected SHA-256 Checksum.
+		expectedSHA256,
+		// Event Channel
+		ch)
 
-			// Save the number of computed bytes and states.
-			computed = ev.Written()
-			states, _ = h1.States()
+	log.Printf("Stage 1: h1.Start() gouroutine exited and the event channel is closed. Computed: %v", computed)
 
-		case *iocopy.EventError:
-			// an error occured.
-			// Get the error.
-			log.Printf("on EventError: %v", ev.Err())
-
-		case *iocopy.EventOK:
-			// Computing is DONE before cancel() is called.
-			// No need to save / load the states and
-			// continue to compute the hashes.
-			log.Printf("on EventOK before cancel() is called")
-
-			// Get the final SHA-256 checksum of the remote file.
-			checksums := h1.Checksums()
-			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
-
-			// Verify the SHA-256 checksum.
-			matched, alg := h1.Match(expectedSHA256)
-			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
-			return
-		}
+	// Check if it's all done at stage 1.
+	// No need to go to next stages.
+	if computed == total {
+		return
 	}
 
-	// The event channel will be closed after:
-	// (1). iocopy.EventError received.
-	// (2). iocopy.EventStop received.
-	// (3). iocopy.EventOK received.
-	// The for-range loop exits when the channel is closed.
-	log.Printf("Stage 1: h1.Start() gouroutine exited and the event channel is closed")
-
 	// Stage 2.
-	// Create a hasher from URL with number of computed bytes and
-	// saved states to continue to compute hashes.
+	// Emulate the user case: pause / resume the computing without
+	// exiting the program.
+	// The hasher(h1) is still in memory.
+	// Re-use the hasher(h1) without loading the states.
+
+	// create a context.
+	ctx, cancel = context.WithCancel(context.Background())
+
+	// Re-use previous hasher and continue computing.
+	ch = h1.Start(
+		// Context
+		ctx,
+		// Buffer size
+		32*1024*1024,
+		// Interval to report written bytes
+		200*time.Millisecond)
+
+	// Emulate: user cancelation.
+	// Set the timeout.
+	go func() {
+		<-time.After(500 * time.Millisecond)
+		cancel()
+	}()
+
+	// Read the events from the events and block current go-routine.
+	computed, states = eventHandler(
+		// Hasher
+		h1,
+		// Number of total bytes to compute
+		total,
+		// Number of previous computed bytes
+		computed,
+		// Expected SHA-256 Checksum.
+		expectedSHA256,
+		// Event Channel
+		ch)
+
+	log.Printf("Stage 2: h1.Start() gouroutine exited and the event channel is closed. Computed: %v", computed)
+
+	// Check if it's all done at stage 2.
+	// No need to go to next stages.
+	if computed == total {
+		return
+	}
+
+	// Stage 3.
+	// Emulate the user case: exit and restart the program.
+	// The hasher's memory is freed.
+	// Use saved states to continue the computing.
+
+	// Create a new hasher from the URL with saved states.
 	h2, total, err := hasher.FromUrlWithStates(
 		// URL
 		downloadURL,
@@ -254,7 +308,7 @@ func ExampleFromUrlWithStates() {
 	// Close the hasher after use.
 	defer h2.Close()
 
-	// Start a worker goroutine to compute hashes of content of the URL.
+	// Start a worker goroutine to compute the hashes of the URL.
 	// It will return a channel used to read the events(iocopy.Event).
 	ch = h2.Start(
 		// Context
@@ -264,51 +318,20 @@ func ExampleFromUrlWithStates() {
 		// Interval to report written bytes
 		500*time.Millisecond)
 
-	newComputed := int64(0)
+	// Read the events from the events and block current go-routine.
+	computed, states = eventHandler(
+		// Hasher
+		h2,
+		// Number of total bytes to compute
+		total,
+		// Number of previous computed bytes
+		computed,
+		// Expected SHA-256 Checksum.
+		expectedSHA256,
+		// Event Channel
+		ch)
 
-	// Read the events from the channel.
-	for event := range ch {
-		switch ev := event.(type) {
-		case *iocopy.EventWritten:
-			// n bytes have been written successfully.
-			// Get the count of bytes.
-			newComputed = computed + ev.Written()
-			percent := float32(float64(newComputed) / (float64(total) / float64(100)))
-			log.Printf("on EventWritten: %v/%v bytes written(%.2f%%)", newComputed, total, percent)
-
-		case *iocopy.EventStop:
-			// Context is canceled or
-			// context's deadline exceeded.
-			log.Printf("on EventStop: %v", ev.Err())
-
-		case *iocopy.EventError:
-			// an error occured.
-			// Get the error.
-			log.Printf("on EventError: %v", ev.Err())
-
-		case *iocopy.EventOK:
-			// IO copy succeeded.
-			// Get the total count of written bytes.
-			newComputed = computed + ev.Written()
-			percent := float32(float64(newComputed) / (float64(total) / float64(100)))
-			log.Printf("on EventOK: %v/%v bytes written(%.2f%%)", newComputed, total, percent)
-
-			// Get the final SHA-256 checksum of the remote file.
-			checksums := h2.Checksums()
-			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
-
-			// Verify the SHA-256 checksum.
-			matched, alg := h2.Match(expectedSHA256)
-			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
-		}
-	}
-
-	// The event channel will be closed after:
-	// (1). iocopy.EventError received.
-	// (2). iocopy.EventStop received.
-	// (3). iocopy.EventOK received.
-	// The for-range loop exits when the channel is closed.
-	log.Printf("Stage 2: h2.Start() gouroutine exited and the event channel is closed")
+	log.Printf("Stage 3: h2.Start() gouroutine exited and the event channel is closed. Computed: %v", computed)
 
 	// Output:
 	// SHA-256:
@@ -317,11 +340,10 @@ func ExampleFromUrlWithStates() {
 }
 
 func ExampleFromFile() {
-	// URL of remote file.
+	// URL of the remote file.
 	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
 	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
-	// Download the file.
 	file := filepath.Join(os.TempDir(), "go1.20.1.darwin-amd64.pkg")
 	log.Printf("file: %v", file)
 
@@ -350,59 +372,15 @@ func ExampleFromFile() {
 	}
 	defer resp.Body.Close()
 
-	// Use iocopy package to make a asynchronous download.
-	ch := iocopy.Start(
-		// Context
-		context.Background(),
-		// Dst
-		f,
-		// Src
-		resp.Body,
-		// Buffer
-		32*1024*1024,
-		// Interval
-		800*time.Millisecond)
-
-	// Read the events from the channel.
-	for event := range ch {
-		switch ev := event.(type) {
-		case *iocopy.EventWritten:
-			// n bytes have been written successfully.
-			// Get the count of bytes.
-			n := ev.Written()
-			percent := float32(float64(n) / (float64(total) / float64(100)))
-			log.Printf("on EventWritten: %v/%v bytes written(%.2f%%)", n, total, percent)
-
-		case *iocopy.EventStop:
-			// Context is canceled or
-			// context's deadline exceeded.
-			log.Printf("on EventStop: %v", ev.Err())
-
-		case *iocopy.EventError:
-			// an error occured.
-			// Get the error.
-			log.Printf("on EventError: %v", ev.Err())
-			return
-
-		case *iocopy.EventOK:
-			// IO copy succeeded.
-			// Get the total count of written bytes.
-			n := ev.Written()
-			percent := float32(float64(n) / (float64(total) / float64(100)))
-			log.Printf("on EventOK: %v/%v bytes written(%.2f%%)", n, total, percent)
-
-			log.Printf("file downloaded successfully.")
-		}
+	// Download the file.
+	copied, err := io.Copy(f, resp.Body)
+	if err != nil {
+		log.Printf("io.Copy() error: %v", err)
+		return
 	}
+	log.Printf("download file successfully, total: %v bytes", copied)
 
-	// The event channel will be closed after:
-	// (1). iocopy.EventError received.
-	// (2). iocopy.EventStop received.
-	// (3). iocopy.EventOK received.
-	// The for-range loop exits when the channel is closed.
-	log.Printf("IO copy gouroutine exited and the event channel is closed")
-
-	// Create a hasher from file.
+	// Create a hasher from the file.
 	h, total, err := hasher.FromFile(file, "MD5", "SHA-256")
 	if err != nil {
 		log.Printf("FromFile() error: %v", err)
@@ -412,9 +390,9 @@ func ExampleFromFile() {
 	// Close the hasher after use.
 	defer h.Close()
 
-	// Start a worker goroutine to compute hashes of content of the URL.
+	// Start a worker goroutine to compute the hashes of the URL.
 	// It will return a channel used to read the events(iocopy.Event).
-	ch = h.Start(
+	ch := h.Start(
 		// Context
 		context.Background(),
 		// Buffer size
@@ -422,49 +400,19 @@ func ExampleFromFile() {
 		// Interval to report written bytes
 		500*time.Millisecond)
 
-	// Read the events from the channel.
-	for event := range ch {
-		switch ev := event.(type) {
-		case *iocopy.EventWritten:
-			// n bytes have been written successfully.
-			// Get the count of bytes.
-			n := ev.Written()
-			percent := float32(float64(n) / (float64(total) / float64(100)))
-			log.Printf("on EventWritten: %v/%v bytes written(%.2f%%)", n, total, percent)
+	// Read the events from the events and block current go-routine.
+	eventHandler(
+		// Hasher
+		h,
+		// Number of total bytes to compute
+		total,
+		// Number of previous computed bytes
+		0,
+		// Expected SHA-256 Checksum.
+		expectedSHA256,
+		// Event Channel
+		ch)
 
-		case *iocopy.EventStop:
-			// Context is canceled or
-			// context's deadline exceeded.
-			log.Printf("on EventStop: %v", ev.Err())
-
-		case *iocopy.EventError:
-			// an error occured.
-			// Get the error.
-			log.Printf("on EventError: %v", ev.Err())
-			return
-
-		case *iocopy.EventOK:
-			// IO copy succeeded.
-			// Get the total count of written bytes.
-			n := ev.Written()
-			percent := float32(float64(n) / (float64(total) / float64(100)))
-			log.Printf("on EventOK: %v/%v bytes written(%.2f%%)", n, total, percent)
-
-			// Get the final SHA-256 checksum of the remote file.
-			checksums := h.Checksums()
-			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
-
-			// Verify the SHA-256 checksum.
-			matched, alg := h.Match(expectedSHA256)
-			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
-		}
-	}
-
-	// The event channel will be closed after:
-	// (1). iocopy.EventError received.
-	// (2). iocopy.EventStop received.
-	// (3). iocopy.EventOK received.
-	// The for-range loop exits when the channel is closed.
 	log.Printf("h.Start() gouroutine exited and the event channel is closed")
 
 	// Output:
@@ -474,17 +422,10 @@ func ExampleFromFile() {
 }
 
 func ExampleFromFileWithStates() {
-	// states is used to save hashes states.
-	var states = make(map[string][]byte)
-
-	// computed is the number of bytes has been written / hashed.
-	var computed int64 = 0
-
-	// URL of remote file.
+	// URL of the remote file.
 	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
 	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
-	// Download the file.
 	file := filepath.Join(os.TempDir(), "go1.20.1.darwin-amd64.pkg")
 	log.Printf("file: %v", file)
 
@@ -513,60 +454,16 @@ func ExampleFromFileWithStates() {
 	}
 	defer resp.Body.Close()
 
-	// Use iocopy package to make a asynchronous download.
-	ch := iocopy.Start(
-		// Context
-		context.Background(),
-		// Dst
-		f,
-		// Src
-		resp.Body,
-		// Buffer
-		32*1024*1024,
-		// Interval
-		800*time.Millisecond)
-
-	// Read the events from the channel.
-	for event := range ch {
-		switch ev := event.(type) {
-		case *iocopy.EventWritten:
-			// n bytes have been written successfully.
-			// Get the count of bytes.
-			n := ev.Written()
-			percent := float32(float64(n) / (float64(total) / float64(100)))
-			log.Printf("on EventWritten: %v/%v bytes written(%.2f%%)", n, total, percent)
-
-		case *iocopy.EventStop:
-			// Context is canceled or
-			// context's deadline exceeded.
-			log.Printf("on EventStop: %v", ev.Err())
-
-		case *iocopy.EventError:
-			// an error occured.
-			// Get the error.
-			log.Printf("on EventError: %v", ev.Err())
-			return
-
-		case *iocopy.EventOK:
-			// IO copy succeeded.
-			// Get the total count of written bytes.
-			n := ev.Written()
-			percent := float32(float64(n) / (float64(total) / float64(100)))
-			log.Printf("on EventOK: %v/%v bytes written(%.2f%%)", n, total, percent)
-
-			log.Printf("file downloaded successfully.")
-		}
+	// Download the file.
+	copied, err := io.Copy(f, resp.Body)
+	if err != nil {
+		log.Printf("io.Copy() error: %v", err)
+		return
 	}
-
-	// The event channel will be closed after:
-	// (1). iocopy.EventError received.
-	// (2). iocopy.EventStop received.
-	// (3). iocopy.EventOK received.
-	// The for-range loop exits when the channel is closed.
-	log.Printf("IO copy gouroutine exited and the event channel is closed")
+	log.Printf("download file successfully, total: %v bytes", copied)
 
 	// Stage 1.
-	// Create a hasher from file.
+	// Create a hasher from the file.
 	h1, total, err := hasher.FromFile(file, "MD5", "SHA-256")
 	if err != nil {
 		log.Printf("FromFile() error: %v", err)
@@ -580,78 +477,113 @@ func ExampleFromFileWithStates() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start a worker goroutine to compute hashes of content of the URL.
+	// Start a worker goroutine to compute the hashes of the file.
 	// It will return a channel used to read the events(iocopy.Event).
+	ch := h1.Start(
+		// Context
+		ctx,
+		// Buffer size
+		32*1024*1024,
+		// Interval to report written bytes
+		200*time.Millisecond)
+
+	// Emulate: user cancelation.
+	// Set the timeout.
+	go func() {
+		<-time.After(100 * time.Millisecond)
+		cancel()
+	}()
+
+	// Read the events from the events and block current go-routine.
+	computed, states := eventHandler(
+		// Hasher
+		h1,
+		// Number of total bytes to compute
+		total,
+		// Number of previous computed bytes
+		0,
+		// Expected SHA-256 Checksum.
+		expectedSHA256,
+		// Event Channel
+		ch)
+
+	log.Printf("Stage 1: h1.Start() gouroutine exited and the event channel is closed. Computed: %v", computed)
+
+	// Check if it's all done at stage 1.
+	// No need to go to next stages.
+	if computed == total {
+		return
+	}
+
+	// Stage 2.
+	// Emulate the user case: pause / resume the computing without
+	// exiting the program.
+	// The hasher(h1) is still in memory.
+	// Re-use the hasher(h1) without loading the states.
+
+	// create a context.
+	ctx, cancel = context.WithCancel(context.Background())
+
+	// Re-use previous hasher and continue computing.
 	ch = h1.Start(
 		// Context
 		ctx,
 		// Buffer size
 		32*1024*1024,
 		// Interval to report written bytes
-		500*time.Millisecond)
+		50*time.Millisecond)
 
-	// Read the events from the channel.
-	for event := range ch {
-		switch ev := event.(type) {
-		case *iocopy.EventWritten:
-			// n bytes have been written successfully.
-			// Get the count of bytes.
-			computed = ev.Written()
-			percent := float32(float64(computed) / (float64(total) / float64(100)))
-			log.Printf("on EventWritten: %v/%v bytes written(%.2f%%)", computed, total, percent)
-			// Stop computing hash when percent > 50%.
-			if percent > 50 {
-				cancel()
-			}
+	// Emulate: user cancelation.
+	// Set the timeout.
+	go func() {
+		<-time.After(80 * time.Millisecond)
+		cancel()
+	}()
 
-		case *iocopy.EventStop:
-			// Context is canceled or
-			// context's deadline exceeded.
-			log.Printf("on EventStop: %v", ev.Err())
+	// Read the events from the events and block current go-routine.
+	computed, states = eventHandler(
+		// Hasher
+		h1,
+		// Number of total bytes to compute
+		total,
+		// Number of previous computed bytes
+		computed,
+		// Expected SHA-256 Checksum.
+		expectedSHA256,
+		// Event Channel
+		ch)
 
-			// Save the number of computed bytes and states.
-			computed = ev.Written()
-			states, _ = h1.States()
+	log.Printf("Stage 2: h1.Start() gouroutine exited and the event channel is closed. Computed: %v", computed)
 
-		case *iocopy.EventError:
-			// an error occured.
-			// Get the error.
-			log.Printf("on EventError: %v", ev.Err())
-
-		case *iocopy.EventOK:
-			log.Printf("on EventOK before cancel() is called")
-			// Save the number of computed bytes and states.
-			computed = ev.Written()
-			states, _ = h1.States()
-		}
+	// Check if it's all done at stage 2.
+	// No need to go to next stages.
+	if computed == total {
+		return
 	}
 
-	// The event channel will be closed after:
-	// (1). iocopy.EventError received.
-	// (2). iocopy.EventStop received.
-	// (3). iocopy.EventOK received.
-	// The for-range loop exits when the channel is closed.
-	log.Printf("Stage 1: h1.Start() gouroutine exited and the event channel is closed")
+	// Stage 3.
+	// Emulate the user case: exit the program and restart the program.
+	// The hasher's memory is freed.
+	// Use saved states to continue computing.
 
-	// Stage 2.
-	// Create a hasher from file with number of computed bytes and
-	// saved states to continue to compute hashes.
+	// Create a new hasher from the file with saved states.
 	h2, total, err := hasher.FromFileWithStates(
-		// File path
+		// File
 		file,
 		// Number of computed bytes
 		computed,
 		// States of hashes
 		states)
+
 	if err != nil {
-		log.Printf("FromFileWithStates() error: %v", err)
+		log.Printf("FromUrlWithStates() error: %v", err)
 		return
 	}
 
 	// Close the hasher after use.
 	defer h2.Close()
 
-	// Start a worker goroutine to compute hashes of content of the URL.
+	// Start a worker goroutine to compute the hashes of the file.
 	// It will return a channel used to read the events(iocopy.Event).
 	ch = h2.Start(
 		// Context
@@ -661,51 +593,20 @@ func ExampleFromFileWithStates() {
 		// Interval to report written bytes
 		500*time.Millisecond)
 
-	newComputed := int64(0)
+	// Read the events from the events and block current go-routine.
+	computed, states = eventHandler(
+		// Hasher
+		h2,
+		// Number of total bytes to compute
+		total,
+		// Number of previous computed bytes
+		computed,
+		// Expected SHA-256 Checksum.
+		expectedSHA256,
+		// Event Channel
+		ch)
 
-	// Read the events from the channel.
-	for event := range ch {
-		switch ev := event.(type) {
-		case *iocopy.EventWritten:
-			// n bytes have been written successfully.
-			// Get the count of bytes.
-			newComputed = computed + ev.Written()
-			percent := float32(float64(newComputed) / (float64(total) / float64(100)))
-			log.Printf("on EventWritten: %v/%v bytes written(%.2f%%)", newComputed, total, percent)
-
-		case *iocopy.EventStop:
-			// Context is canceled or
-			// context's deadline exceeded.
-			log.Printf("on EventStop: %v", ev.Err())
-
-		case *iocopy.EventError:
-			// an error occured.
-			// Get the error.
-			log.Printf("on EventError: %v", ev.Err())
-
-		case *iocopy.EventOK:
-			// IO copy succeeded.
-			// Get the total count of written bytes.
-			newComputed = computed + ev.Written()
-			percent := float32(float64(newComputed) / (float64(total) / float64(100)))
-			log.Printf("on EventOK: %v/%v bytes written(%.2f%%)", newComputed, total, percent)
-
-			// Get the final SHA-256 checksum of the remote file.
-			checksums := h2.Checksums()
-			fmt.Printf("SHA-256:\n%x\n", checksums["SHA-256"])
-
-			// Verify the SHA-256 checksum.
-			matched, alg := h2.Match(expectedSHA256)
-			fmt.Printf("matched: %v, matched hash algorithm: %v", matched, alg)
-		}
-	}
-
-	// The event channel will be closed after:
-	// (1). iocopy.EventError received.
-	// (2). iocopy.EventStop received.
-	// (3). iocopy.EventOK received.
-	// The for-range loop exits when the channel is closed.
-	log.Printf("Stage 2: h2.Start() gouroutine exited and the event channel is closed")
+	log.Printf("Stage 3: h2.Start() gouroutine exited and the event channel is closed. Computed: %v", computed)
 
 	// Output:
 	// SHA-256:

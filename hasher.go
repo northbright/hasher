@@ -84,12 +84,11 @@ func SupportedHashAlgs() []string {
 
 // Hasher is used to compute the hash algorithm checksums.
 type Hasher struct {
-	r               io.Reader
-	needCloseReader bool
-	hashes          map[string]hash.Hash
+	r      io.Reader
+	hashes map[string]hash.Hash
 }
 
-func newHasher(r io.Reader, needCloseReader bool, hashAlgs ...string) (*Hasher, error) {
+func newHasher(r io.Reader, hashAlgs ...string) (*Hasher, error) {
 	hashes := make(map[string]hash.Hash)
 
 	if hashAlgs == nil {
@@ -106,19 +105,18 @@ func newHasher(r io.Reader, needCloseReader bool, hashAlgs ...string) (*Hasher, 
 		hashes[alg] = f()
 	}
 
-	return &Hasher{r: r, needCloseReader: false, hashes: hashes}, nil
+	return &Hasher{r: r, hashes: hashes}, nil
 }
 
 // New creates a new Hasher.
 // r: io.Reader to read data from.
 // hashAlgs: hash algorithms to compute the checksums.
 func New(r io.Reader, hashAlgs ...string) (*Hasher, error) {
-	return newHasher(r, false, hashAlgs...)
+	return newHasher(r, hashAlgs...)
 }
 
 func newHasherWithStates(
 	r io.Reader,
-	needCloseReader bool,
 	states map[string][]byte) (*Hasher, error) {
 	var (
 		algs []string
@@ -132,7 +130,7 @@ func newHasherWithStates(
 		algs = append(algs, alg)
 	}
 
-	h, err := newHasher(r, needCloseReader, algs...)
+	h, err := newHasher(r, algs...)
 	if err != nil {
 		return nil, err
 	}
@@ -157,17 +155,14 @@ func newHasherWithStates(
 // states: a map stores the saved states.
 // The key is the hash algorithm and the value is the state in byte slice.
 func NewWithStates(r io.Reader, states map[string][]byte) (*Hasher, error) {
-	return newHasherWithStates(r, false, states)
+	return newHasherWithStates(r, states)
 }
 
-// Close closes the hasher.
+// Close closes the internal reader if it implements io.ReadCloser.
 // It's not goroutine-safe and should be called only if computing is done / stopped.
 func (h *Hasher) Close() {
-	// Close the reader if need.
-	if h.needCloseReader {
-		if closer, ok := h.r.(io.ReadCloser); ok {
-			closer.Close()
-		}
+	if closer, ok := h.r.(io.ReadCloser); ok {
+		closer.Close()
 	}
 }
 
@@ -186,7 +181,7 @@ func FromStrings(strs []string, hashAlgs ...string) (h *Hasher, total int64, err
 
 	r := io.MultiReader(readers...)
 
-	h, err = newHasher(r, false, hashAlgs...)
+	h, err = newHasher(r, hashAlgs...)
 	return h, total, err
 }
 
@@ -232,8 +227,7 @@ func FromUrl(
 	}
 
 	// Create a hasher.
-	// Need to close the reader when call Hasher.Close.
-	h, err = newHasher(resp.Body, true, hashAlgs...)
+	h, err = newHasher(resp.Body, hashAlgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -298,8 +292,7 @@ func FromUrlWithStates(
 	}
 
 	// Create a hasher with states.
-	// Need to close the reader when call Hasher.Close.
-	h, err = newHasherWithStates(resp.Body, true, states)
+	h, err = newHasherWithStates(resp.Body, states)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -330,8 +323,7 @@ func FromFile(
 	total = fi.Size()
 
 	// Create a hasher.
-	// Need to close the reader when call Hasher.Close.
-	h, err = newHasher(f, true, hashAlgs...)
+	h, err = newHasher(f, hashAlgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -382,8 +374,7 @@ func FromFileWithStates(
 	}
 
 	// Create a hasher with states.
-	// Need to close the reader when call Hasher.Close.
-	h, err = newHasherWithStates(f, true, states)
+	h, err = newHasherWithStates(f, states)
 	if err != nil {
 		return nil, 0, err
 	}
