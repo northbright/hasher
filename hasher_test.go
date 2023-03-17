@@ -106,14 +106,17 @@ func ExampleFromStrings() {
 		input2 = "unaware of what he will find."
 	)
 
-	// Create a hasher with given hash algorithms.
+	// Specify hash algorithms.
 	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512", "CRC-32".
 	// Call SupportedHashAlgs to get all available hash algorithms.
+	algs := []string{"MD5", "SHA-256", "CRC-32"}
+
+	// Create a hasher with given hash algorithms.
 	h, total, _ := hasher.FromStrings(
 		// String slice
 		[]string{input1, input2},
 		// Hash algorithms
-		"MD5", "SHA-256", "CRC-32")
+		algs)
 
 	// Close the hasher after use.
 	defer h.Close()
@@ -139,9 +142,14 @@ func ExampleFromUrl() {
 	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
 	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
+	// Specify hash algorithms.
+	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512", "CRC-32".
+	// Call SupportedHashAlgs to get all available hash algorithms.
+	algs := []string{"MD5", "SHA-256"}
+
 	// Create a hasher from the URL.
 	// The total content length of the URL will be returned if possible.
-	h, total, err := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
+	h, total, err := hasher.FromUrl(downloadURL, algs)
 	if err != nil {
 		log.Printf("FromUrl() error: %v", err)
 		return
@@ -186,10 +194,15 @@ func ExampleFromUrlWithStates() {
 	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
 	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
+	// Specify hash algorithms.
+	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512", "CRC-32".
+	// Call SupportedHashAlgs to get all available hash algorithms.
+	algs := []string{"MD5", "SHA-256"}
+
 	// Stage 1.
 	// Create a hasher from the URL.
 	// The total content length of the URL will be returned if possible.
-	h1, total, err := hasher.FromUrl(downloadURL, "MD5", "SHA-256")
+	h1, total, err := hasher.FromUrl(downloadURL, algs)
 	if err != nil {
 		log.Printf("FromUrl() error: %v", err)
 		return
@@ -380,8 +393,13 @@ func ExampleFromFile() {
 	}
 	log.Printf("download file successfully, total: %v bytes", copied)
 
+	// Specify hash algorithms.
+	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512", "CRC-32".
+	// Call SupportedHashAlgs to get all available hash algorithms.
+	algs := []string{"MD5", "SHA-256"}
+
 	// Create a hasher from the file.
-	h, total, err := hasher.FromFile(file, "MD5", "SHA-256")
+	h, total, err := hasher.FromFile(file, algs)
 	if err != nil {
 		log.Printf("FromFile() error: %v", err)
 		return
@@ -462,9 +480,14 @@ func ExampleFromFileWithStates() {
 	}
 	log.Printf("download file successfully, total: %v bytes", copied)
 
+	// Specify hash algorithms.
+	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512", "CRC-32".
+	// Call SupportedHashAlgs to get all available hash algorithms.
+	algs := []string{"MD5", "SHA-256"}
+
 	// Stage 1.
 	// Create a hasher from the file.
-	h1, total, err := hasher.FromFile(file, "MD5", "SHA-256")
+	h1, total, err := hasher.FromFile(file, algs)
 	if err != nil {
 		log.Printf("FromFile() error: %v", err)
 		return

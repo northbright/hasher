@@ -88,7 +88,7 @@ type Hasher struct {
 	hashes map[string]hash.Hash
 }
 
-func newHasher(r io.Reader, hashAlgs ...string) (*Hasher, error) {
+func newHasher(r io.Reader, hashAlgs []string) (*Hasher, error) {
 	hashes := make(map[string]hash.Hash)
 
 	if hashAlgs == nil {
@@ -111,8 +111,8 @@ func newHasher(r io.Reader, hashAlgs ...string) (*Hasher, error) {
 // New creates a new Hasher.
 // r: io.Reader to read data from.
 // hashAlgs: hash algorithms to compute the checksums.
-func New(r io.Reader, hashAlgs ...string) (*Hasher, error) {
-	return newHasher(r, hashAlgs...)
+func New(r io.Reader, hashAlgs []string) (*Hasher, error) {
+	return newHasher(r, hashAlgs)
 }
 
 func newHasherWithStates(
@@ -130,7 +130,7 @@ func newHasherWithStates(
 		algs = append(algs, alg)
 	}
 
-	h, err := newHasher(r, algs...)
+	h, err := newHasher(r, algs)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (h *Hasher) Close() {
 // FromStrings creates a new Hasher to compute the hashes for the strings.
 // strs: string slice to compute hashes.
 // hashAlgs: hash algorithms.
-func FromStrings(strs []string, hashAlgs ...string) (h *Hasher, total int64, err error) {
+func FromStrings(strs []string, hashAlgs []string) (h *Hasher, total int64, err error) {
 	var (
 		readers []io.Reader
 	)
@@ -181,15 +181,15 @@ func FromStrings(strs []string, hashAlgs ...string) (h *Hasher, total int64, err
 
 	r := io.MultiReader(readers...)
 
-	h, err = newHasher(r, hashAlgs...)
+	h, err = newHasher(r, hashAlgs)
 	return h, total, err
 }
 
 // FromString creates a new Hasher to compute the hashes for the string.
 // str: string to compute hashes.
 // hashAlgs: hash algorithms.
-func FromString(str string, hashAlgs ...string) (h *Hasher, total int64, err error) {
-	return FromStrings([]string{str}, hashAlgs...)
+func FromString(str string, hashAlgs []string) (h *Hasher, total int64, err error) {
+	return FromStrings([]string{str}, hashAlgs)
 }
 
 // FromUrl creates a new Hasher to compute the hashes for the URL.
@@ -197,7 +197,7 @@ func FromString(str string, hashAlgs ...string) (h *Hasher, total int64, err err
 // hashAlgs: hash algorithms.
 func FromUrl(
 	url string,
-	hashAlgs ...string) (h *Hasher, total int64, err error) {
+	hashAlgs []string) (h *Hasher, total int64, err error) {
 
 	// Get remote content length and
 	// check if range header is supported by the server.
@@ -227,7 +227,7 @@ func FromUrl(
 	}
 
 	// Create a hasher.
-	h, err = newHasher(resp.Body, hashAlgs...)
+	h, err = newHasher(resp.Body, hashAlgs)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -304,7 +304,7 @@ func FromUrlWithStates(
 // hashAlgs: hash algorithms.
 func FromFile(
 	file string,
-	hashAlgs ...string) (h *Hasher, total int64, err error) {
+	hashAlgs []string) (h *Hasher, total int64, err error) {
 
 	// Open file.
 	// f will be closed when Hasher.Close is called.
@@ -323,7 +323,7 @@ func FromFile(
 	total = fi.Size()
 
 	// Create a hasher.
-	h, err = newHasher(f, hashAlgs...)
+	h, err = newHasher(f, hashAlgs)
 	if err != nil {
 		return nil, 0, err
 	}
