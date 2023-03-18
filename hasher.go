@@ -166,10 +166,18 @@ func (h *Hasher) Close() {
 	}
 }
 
+// ProxyReaderHandler
+type ProxyReaderHandler func(r io.Reader) io.Reader
+
 // FromStrings creates a new Hasher to compute the hashes for the strings.
 // strs: string slice to compute hashes.
 // hashAlgs: hash algorithms.
-func FromStrings(strs []string, hashAlgs []string) (h *Hasher, total int64, err error) {
+// handler: handle function to create a proxy reader by given original reader.
+// It'll read the data from the proxy reader(e.g. progress bar reader).
+func FromStrings(
+	strs []string,
+	hashAlgs []string,
+	handler ProxyReaderHandler) (h *Hasher, total int64, err error) {
 	var (
 		readers []io.Reader
 	)
@@ -181,6 +189,11 @@ func FromStrings(strs []string, hashAlgs []string) (h *Hasher, total int64, err 
 
 	r := io.MultiReader(readers...)
 
+	// Create a proxy reader if need.
+	if handler != nil {
+		r = handler(r)
+	}
+
 	h, err = newHasher(r, hashAlgs)
 	return h, total, err
 }
@@ -188,16 +201,28 @@ func FromStrings(strs []string, hashAlgs []string) (h *Hasher, total int64, err 
 // FromString creates a new Hasher to compute the hashes for the string.
 // str: string to compute hashes.
 // hashAlgs: hash algorithms.
-func FromString(str string, hashAlgs []string) (h *Hasher, total int64, err error) {
-	return FromStrings([]string{str}, hashAlgs)
+// handler: handle function to create a proxy reader by given original reader.
+// It'll read the data from the proxy reader(e.g. progress bar reader).
+func FromString(
+	str string,
+	hashAlgs []string,
+	handler ProxyReaderHandler) (h *Hasher, total int64, err error) {
+	return FromStrings([]string{str}, hashAlgs, handler)
 }
 
 // FromUrl creates a new Hasher to compute the hashes for the URL.
 // url: URL to compute hashes.
 // hashAlgs: hash algorithms.
+// handler: handle function to create a proxy reader by given original reader.
+// It'll read the data from the proxy reader(e.g. progress bar reader).
 func FromUrl(
 	url string,
-	hashAlgs []string) (h *Hasher, total int64, err error) {
+	hashAlgs []string,
+	handler ProxyReaderHandler) (h *Hasher, total int64, err error) {
+
+	var (
+		r io.Reader
+	)
 
 	// Get remote content length and
 	// check if range header is supported by the server.
@@ -226,8 +251,15 @@ func FromUrl(
 		return nil, 0, ErrStatusCodeIsNot200
 	}
 
+	// Create a proxy reader if need.
+	if handler != nil {
+		r = handler(resp.Body)
+	} else {
+		r = resp.Body
+	}
+
 	// Create a hasher.
-	h, err = newHasher(resp.Body, hashAlgs)
+	h, err = newHasher(r, hashAlgs)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -240,10 +272,17 @@ func FromUrl(
 // computed: number of computed(hashed) bytes. It should match the saved states.
 // states: a map stores the saved states.
 // The key is the hash algorithm and the value is the state in byte slice.
+// handler: handle function to create a proxy reader by given original reader.
+// It'll read the data from the proxy reader(e.g. progress bar reader).
 func FromUrlWithStates(
 	url string,
 	computed int64,
-	states map[string][]byte) (h *Hasher, total int64, err error) {
+	states map[string][]byte,
+	handler ProxyReaderHandler) (h *Hasher, total int64, err error) {
+
+	var (
+		r io.Reader
+	)
 
 	// Check states.
 	if states == nil {
@@ -291,8 +330,15 @@ func FromUrlWithStates(
 		return nil, 0, ErrStatusCodeIsNot206
 	}
 
+	// Create a proxy reader if need.
+	if handler != nil {
+		r = handler(resp.Body)
+	} else {
+		r = resp.Body
+	}
+
 	// Create a hasher with states.
-	h, err = newHasherWithStates(resp.Body, states)
+	h, err = newHasherWithStates(r, states)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -302,9 +348,16 @@ func FromUrlWithStates(
 // FromFile creates a new Hasher to compute the hashes for the file.
 // file: file path to compute the hashes.
 // hashAlgs: hash algorithms.
+// handler: handle function to create a proxy reader by given original reader.
+// It'll read the data from the proxy reader(e.g. progress bar reader).
 func FromFile(
 	file string,
-	hashAlgs []string) (h *Hasher, total int64, err error) {
+	hashAlgs []string,
+	handler ProxyReaderHandler) (h *Hasher, total int64, err error) {
+
+	var (
+		r io.Reader
+	)
 
 	// Open file.
 	// f will be closed when Hasher.Close is called.
@@ -322,8 +375,15 @@ func FromFile(
 	// Get file size.
 	total = fi.Size()
 
+	// Create a proxy reader if need.
+	if handler != nil {
+		r = handler(f)
+	} else {
+		r = f
+	}
+
 	// Create a hasher.
-	h, err = newHasher(f, hashAlgs)
+	h, err = newHasher(r, hashAlgs)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -336,10 +396,17 @@ func FromFile(
 // computed: number of computed(hashed) bytes. It should match the saved states.
 // states: a map stores the saved states.
 // The key is the hash algorithm and the value is the state in byte slice.
+// handler: handle function to create a proxy reader by given original reader.
+// It'll read the data from the proxy reader(e.g. progress bar reader).
 func FromFileWithStates(
 	file string,
 	computed int64,
-	states map[string][]byte) (h *Hasher, total int64, err error) {
+	states map[string][]byte,
+	handler ProxyReaderHandler) (h *Hasher, total int64, err error) {
+
+	var (
+		r io.Reader
+	)
 
 	// Check states.
 	if states == nil {
@@ -373,8 +440,15 @@ func FromFileWithStates(
 		return nil, 0, err
 	}
 
+	// Create a proxy reader if need.
+	if handler != nil {
+		r = handler(f)
+	} else {
+		r = f
+	}
+
 	// Create a hasher with states.
-	h, err = newHasherWithStates(f, states)
+	h, err = newHasherWithStates(r, states)
 	if err != nil {
 		return nil, 0, err
 	}
