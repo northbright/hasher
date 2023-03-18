@@ -356,36 +356,28 @@ func ExampleFromUrlWithStates() {
 	// matched: true, matched hash algorithm: SHA-256
 }
 
-func ExampleFromFile() {
-	// URL of the remote file.
-	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
-	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
-
-	file := filepath.Join(os.TempDir(), "go1.20.1.darwin-amd64.pkg")
-	log.Printf("file: %v", file)
-
+func download(downloadURL, file string) (int64, error) {
 	f, err := os.Create(file)
 	if err != nil {
 		log.Printf("os.Create() error: %v", err)
-		return
+		return 0, err
 	}
 	// Close and delete the temp file.
 	defer func() {
 		f.Close()
-		os.Remove(file)
 	}()
 
 	// Get remote file size.
 	total, _, err := httputil.ContentLength(downloadURL)
 	if err != nil {
 		log.Printf("httputil.ContentLength() error: %v", err)
-		return
+		return 0, err
 	}
 
 	resp, err := http.Get(downloadURL)
 	if err != nil {
 		log.Printf("http.Get() error: %v", err)
-		return
+		return 0, err
 	}
 	defer resp.Body.Close()
 
@@ -393,9 +385,34 @@ func ExampleFromFile() {
 	copied, err := io.Copy(f, resp.Body)
 	if err != nil {
 		log.Printf("io.Copy() error: %v", err)
+		return 0, err
+	}
+
+	if copied != total {
+		return 0, fmt.Errorf("downloaded size != total size")
+	}
+
+	return total, nil
+}
+
+func ExampleFromFile() {
+	// URL of the remote file.
+	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
+	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
+
+	// Get temp file name.
+	file := filepath.Join(os.TempDir(), filepath.Base(downloadURL))
+	log.Printf("file: %v", file)
+	defer os.Remove(file)
+
+	// Download the file.
+	total, err := download(downloadURL, file)
+	if err != nil {
+		log.Printf("download() error: %v", err)
 		return
 	}
-	log.Printf("download file successfully, total: %v bytes", copied)
+
+	log.Printf("download file successfully, total: %v bytes", total)
 
 	// Specify hash algorithms.
 	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512", "CRC-32".
@@ -448,41 +465,19 @@ func ExampleFromFileWithStates() {
 	downloadURL := "https://golang.google.cn/dl/go1.20.1.darwin-amd64.pkg"
 	expectedSHA256 := "9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251"
 
-	file := filepath.Join(os.TempDir(), "go1.20.1.darwin-amd64.pkg")
+	// Get temp file name.
+	file := filepath.Join(os.TempDir(), filepath.Base(downloadURL))
 	log.Printf("file: %v", file)
-
-	f, err := os.Create(file)
-	if err != nil {
-		log.Printf("os.Create() error: %v", err)
-		return
-	}
-	// Close and delete the temp file.
-	defer func() {
-		f.Close()
-		os.Remove(file)
-	}()
-
-	// Get remote file size.
-	total, _, err := httputil.ContentLength(downloadURL)
-	if err != nil {
-		log.Printf("httputil.ContentLength() error: %v", err)
-		return
-	}
-
-	resp, err := http.Get(downloadURL)
-	if err != nil {
-		log.Printf("http.Get() error: %v", err)
-		return
-	}
-	defer resp.Body.Close()
+	defer os.Remove(file)
 
 	// Download the file.
-	copied, err := io.Copy(f, resp.Body)
+	total, err := download(downloadURL, file)
 	if err != nil {
-		log.Printf("io.Copy() error: %v", err)
+		log.Printf("download() error: %v", err)
 		return
 	}
-	log.Printf("download file successfully, total: %v bytes", copied)
+
+	log.Printf("download file successfully, total: %v bytes", total)
 
 	// Specify hash algorithms.
 	// Currently, it supports: "MD5", "SHA-1", "SHA-256", "SHA-512", "CRC-32".
