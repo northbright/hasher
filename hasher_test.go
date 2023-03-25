@@ -116,9 +116,7 @@ func ExampleFromStrings() {
 		// String slice
 		[]string{input1, input2},
 		// Hash algorithms
-		algs,
-		// Proxy Reader Hanlder if Need
-		nil)
+		algs)
 
 	// Close the hasher after use.
 	defer h.Close()
@@ -151,7 +149,7 @@ func ExampleFromUrl() {
 
 	// Create a hasher from the URL.
 	// The total content length of the URL will be returned if possible.
-	h, total, err := hasher.FromUrl(downloadURL, algs, nil)
+	h, total, err := hasher.FromUrl(downloadURL, algs)
 	if err != nil {
 		log.Printf("FromUrl() error: %v", err)
 		return
@@ -204,7 +202,7 @@ func ExampleFromUrlWithStates() {
 	// Stage 1.
 	// Create a hasher from the URL.
 	// The total content length of the URL will be returned if possible.
-	h1, total, err := hasher.FromUrl(downloadURL, algs, nil)
+	h1, total, err := hasher.FromUrl(downloadURL, algs)
 	if err != nil {
 		log.Printf("FromUrl() error: %v", err)
 		return
@@ -313,9 +311,7 @@ func ExampleFromUrlWithStates() {
 		// Number of computed bytes
 		computed,
 		// States of hashes
-		states,
-		// Proxy Reader Hanlder if Need
-		nil)
+		states)
 
 	if err != nil {
 		log.Printf("FromUrlWithStates() error: %v", err)
@@ -420,7 +416,7 @@ func ExampleFromFile() {
 	algs := []string{"MD5", "SHA-256"}
 
 	// Create a hasher from the file.
-	h, total, err := hasher.FromFile(file, algs, nil)
+	h, total, err := hasher.FromFile(file, algs)
 	if err != nil {
 		log.Printf("FromFile() error: %v", err)
 		return
@@ -486,7 +482,7 @@ func ExampleFromFileWithStates() {
 
 	// Stage 1.
 	// Create a hasher from the file.
-	h1, total, err := hasher.FromFile(file, algs, nil)
+	h1, total, err := hasher.FromFile(file, algs)
 	if err != nil {
 		log.Printf("FromFile() error: %v", err)
 		return
@@ -595,9 +591,7 @@ func ExampleFromFileWithStates() {
 		// Number of computed bytes
 		computed,
 		// States of hashes
-		states,
-		// Proxy Reader Hanlder if Need
-		nil)
+		states)
 
 	if err != nil {
 		log.Printf("FromUrlWithStates() error: %v", err)
