@@ -1,6 +1,6 @@
 module github.com/northbright/hasher
 
-go 1.19
+go 1.20
 
 require (
 	github.com/northbright/httputil v1.0.0
