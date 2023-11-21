@@ -463,30 +463,6 @@ func (h *Hasher) Match(checksum string) (matched bool, matchedHashAlg string) {
 // Start starts a worker goroutine to read data and compute the hashes.
 // It wraps the basic iocopy.Start fucntion.
 // See https://pkg.go.dev/github.com/northbright/iocopy#Start for more information.
-// ctx: context.Context.
-// bufSize: size of the buffer. It'll create a buffer in the new goroutine according to the buffer size.
-// interval: interval to send EventWritten event to the channel.
-// You may set it to DefaultInterval.
-//
-// It returns a channel to receive IO copy events.
-// There're 4 types of events will be send to the channel:
-// (1). n bytes have been written successfully.
-//
-//	It'll send an EventWritten to the channel.
-//
-// (2). an error occured
-//
-//	It'll send an EventError to the channel and close the channel.
-//
-// (3). IO copy stopped(context is canceled or context's deadline exceeded).
-//
-//	It'll send an EventStop to the channel and close the channel.
-//
-// (4). IO copy succeeded.
-//
-//	It'll send an EventOK to the channel and close the channel.
-//
-// You may use a for-range loop to read events from the channel.
 func (h *Hasher) Start(
 	ctx context.Context,
 	bufSize int64,
