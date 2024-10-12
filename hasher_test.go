@@ -3,16 +3,12 @@ package hasher_test
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/northbright/hasher"
-	"github.com/northbright/httputil"
-	"github.com/northbright/iocopy"
 )
 
 func ExampleSupportedHashAlgs() {
@@ -34,6 +30,7 @@ func ExampleSupportedHashAlgs() {
 	// 4: SHA-512
 }
 
+/*
 // eventHandler reads the events from channel and block caller's go-routine.
 // It updates and reports the progress of computing hashes.
 // It returns the number of the computed bytes and the saved states after
@@ -630,4 +627,96 @@ func ExampleFromFileWithStates() {
 	// SHA-256:
 	// 9e2f2a4031b215922aa21a3695e30bbfa1f7707597834287415dbc862c6a3251
 	// matched: true, matched hash algorithm: SHA-256
+}
+*/
+
+func ExampleChecksums() {
+	// This example uses hasher.Checksums to read stream from a remote file,
+	// and compute its SHA-256 checksum.
+	// It uses a timeout context to emulate user cancelation to stop the calculation.
+	// Then it calls hasher.Checksums again to resume the calculation.
+
+	// SHA-256: dd9e772686ed908bcff94b6144322d4e2473a7dcd7c696b7e8b6d12f23c887fd
+	url := "https://golang.google.cn/dl/go1.23.1.darwin-amd64.pkg"
+
+	// Get response body(io.Reader) of the remote file.
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Printf("http.Get() error: %v, url: %v", err, url)
+	}
+	defer resp.Body.Close()
+
+	// Try to get size of the file.
+	size := int64(-1)
+	str := resp.Header.Get("Content-Length")
+	if str != "" {
+		size, _ = strconv.ParseInt(str, 10, 64)
+	}
+
+	// Use a timeout to emulate user's cancelation.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*200)
+	defer cancel()
+
+	n, states, err := hasher.Checksums(
+		// context.Context.
+		ctx,
+		// io.Reader
+		resp.Body,
+		// Total Size.
+		size,
+		// Option to set hash algorithms.
+		hasher.Algs([]string{"SHA-256"}),
+		// Option to set OnDownloadFunc to report progress.
+		hasher.OnHash(func(total, prev, current int64, percent float32) {
+			log.Printf("%v / %v(%.2f%%) calculated", prev+current, total, percent)
+
+		}),
+	)
+
+	if err != nil {
+		if err != context.Canceled && err != context.DeadlineExceeded {
+			log.Printf("hasher.Checksums() error: %v", err)
+			return
+		} else {
+			log.Printf("calculation stopped by user, bytes hashed: %v, states: %v\n", n, states)
+		}
+	} else {
+		log.Printf("hasher.Checksums() OK")
+		fmt.Printf("%x", states["SHA-256"])
+	}
+
+	// Call hasher.Checksums again to resume previous calculation.
+	n, checksums, err := hasher.Checksums(
+		// context.Context.
+		context.Background(),
+		// io.Reader.
+		// The offset of the reader should be corresponding to the previous states.
+		resp.Body,
+		// Total Size.
+		size,
+		// States to resume previous calculation.
+		hasher.States(n, states),
+		// Option to set hash algorithms.
+		hasher.Algs([]string{"SHA-256"}),
+		// Option to set OnDownloadFunc to report progress.
+		hasher.OnHash(func(total, prev, current int64, percent float32) {
+			log.Printf("%v / %v(%.2f%%) calculated", prev+current, total, percent)
+
+		}),
+	)
+
+	if err != nil {
+		if err != context.Canceled && err != context.DeadlineExceeded {
+			log.Printf("hasher.Checksums() error: %v", err)
+			return
+		} else {
+			log.Printf("calculation stopped by user, bytes hashed: %v, states: %v\n", n, states)
+		}
+	} else {
+		log.Printf("hasher.Checksums() OK")
+		fmt.Printf("%x", checksums["SHA-256"])
+	}
+
+	// Output:
+	// dd9e772686ed908bcff94b6144322d4e2473a7dcd7c696b7e8b6d12f23c887fd
 }

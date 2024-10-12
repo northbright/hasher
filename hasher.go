@@ -7,20 +7,15 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
-	"net/http"
-	"os"
 	"sort"
-	"strings"
 	"time"
 
-	"github.com/northbright/httputil"
 	"github.com/northbright/iocopy"
+	"github.com/northbright/iocopy/progress"
 )
 
 // crc32NewIEEE is a wrapper of crc32.NewIEEE.
@@ -38,11 +33,17 @@ var (
 		"CRC-32":  crc32NewIEEE,
 	}
 
+	// Default hash algorithms.
+	DefaultAlgs = []string{"MD5", "SHA-1", "SHA-256"}
+
 	// ErrUnSupportedHashAlg indicates that the hash algorithm is not supported.
 	ErrUnSupportedHashAlg = errors.New("unsupported hash algorithm")
 
-	// No states specified
+	// No states specified.
 	ErrNoStates = errors.New("no states")
+
+	// No state found by given algorithm.
+	ErrNoStateFound = errors.New("no state found")
 
 	// Not encoding.BinaryMarshaler
 	ErrNotBinaryMarshaler = errors.New("not binary marshaler")
@@ -82,6 +83,7 @@ func SupportedHashAlgs() []string {
 	return algs
 }
 
+/*
 // Hasher is used to compute the hash algorithm checksums.
 type Hasher struct {
 	r      io.Reader
@@ -512,3 +514,204 @@ func (h *Hasher) Compute(
 
 	return nil, 0, ErrNoChecksums
 }
+*/
+
+type calculator struct {
+	algs     []string
+	hashed   int64
+	states   map[string][]byte
+	fn       OnHashFunc
+	interval time.Duration
+}
+
+// Option sets optional parameters to report progress.
+type Option func(c *calculator)
+
+// Algs returns an option to set hash algorithms.
+// algs: name of hash algorithms.
+// Current supported hash algorithms: MD5, SHA-1, SHA-256, SHA-512, CRC-32.
+// Call [SupportedHashAlgs] to get supported hash algorithms programmatically.
+// If no hash algorithms specified, it uses [DefaultAlgs].
+func Algs(algs []string) Option {
+	return func(c *calculator) {
+		c.algs = algs
+	}
+}
+
+// States returns an option to set the states to resume previous hash calculation.
+// hashed: number of bytes calculated previously.
+// states: map stores the states. key: algorithm, value: binary data.
+func States(hashed int64, states map[string][]byte) Option {
+	return func(c *calculator) {
+		c.hashed = hashed
+		c.states = states
+	}
+}
+
+// OnHashFunc is the callback function when bytes are calculated successfully.
+// See [progress.OnWrittenFunc].
+type OnHashFunc progress.OnWrittenFunc
+
+// OnHash returns an option to set callback to report progress.
+func OnHash(fn OnHashFunc) Option {
+	return func(c *calculator) {
+		c.fn = fn
+	}
+}
+
+// OnHashInterval returns an option to set the interval of the callback.
+func OnHashInterval(d time.Duration) Option {
+	return func(c *calculator) {
+		c.interval = d
+	}
+}
+
+// ChecksumsBuffer returns the checksums of given hash algorithms by reading r.
+// ctx: [context.Context].
+// It returns states of the hashes instead of checksums
+// if the context is canceled or the deadline expires.
+// Users can call [States] to get an option and pass it to the next call of [ChecksumsBuffer],
+// to resume previous calculation.
+// r: read the bytes from r and calculate the hash checksums.
+// The reader offset should be corresponding to the previous states when states option is set.
+// total: total size of r. It's used to report the progress.
+// Set it to -1 if its total size is unknown.
+// buf: buffer used for the calculation.
+// options: [Option] used to resume previous calculation or report progress.
+func ChecksumsBuffer(ctx context.Context, r io.Reader, total int64, buf []byte, options ...Option) (written int64, checksums map[string][]byte, err error) {
+	// Set options.
+	c := &calculator{}
+	for _, option := range options {
+		option(c)
+	}
+
+	if len(c.algs) == 0 {
+		c.algs = DefaultAlgs
+	}
+
+	hashes := make(map[string]hash.Hash)
+	var writers []io.Writer
+
+	// Create hash.Hash by algorithm
+	for _, alg := range c.algs {
+		f, ok := hashAlgsToNewFuncs[alg]
+		if !ok {
+			return 0, nil, ErrUnSupportedHashAlg
+		}
+		// Call f function to new a hash.Hash and insert it to the map.
+		hashes[alg] = f()
+
+		// Resume previous calculation by loading binary states.
+		if c.hashed > 0 {
+			state, ok := c.states[alg]
+			if !ok {
+				return 0, nil, ErrNoStateFound
+			}
+
+			unmarshaler, ok := hashes[alg].(encoding.BinaryUnmarshaler)
+			if !ok {
+				return 0, nil, ErrNotBinaryUnmarshaler
+			}
+
+			if err = unmarshaler.UnmarshalBinary(state); err != nil {
+				return 0, nil, err
+			}
+		}
+
+		writers = append(writers, hashes[alg])
+	}
+
+	w := io.MultiWriter(writers...)
+
+	var writer io.Writer = w
+
+	if c.fn != nil {
+		// Create a progress.
+		p := progress.New(
+			// Total size.
+			total,
+			// OnWrittenFunc.
+			progress.OnWrittenFunc(c.fn),
+			// Option to set number of bytes copied previously.
+			progress.Prev(c.hashed),
+			// Option to set interval.
+			progress.Interval(c.interval),
+		)
+
+		// Create a multiple writer and dupllicates writes to p.
+		writer = io.MultiWriter(w, p)
+
+		// Create a channel.
+		// Send an empty struct to it to make progress goroutine exit.
+		chExit := make(chan struct{}, 1)
+		defer func() {
+			chExit <- struct{}{}
+		}()
+
+		// Starts a new goroutine to report progress until ctx.Done() and chExit receive an empty struct.
+		p.Start(ctx, chExit)
+	}
+
+	if len(buf) != 0 {
+		written, err = iocopy.CopyBuffer(ctx, writer, r, buf)
+	} else {
+		written, err = iocopy.Copy(ctx, writer, r)
+	}
+
+	if err != nil {
+		if err != context.Canceled && err != context.DeadlineExceeded {
+			return written, nil, err
+		} else {
+			// Calculation stopped.
+			// Return states instead of checksums.
+			states := make(map[string][]byte)
+			for alg, h := range hashes {
+				marshaler, ok := h.(encoding.BinaryMarshaler)
+				if !ok {
+					return 0, nil, ErrNotBinaryMarshaler
+				}
+
+				state, err := marshaler.MarshalBinary()
+				if err != nil {
+					return 0, nil, err
+				}
+
+				states[alg] = state
+			}
+
+			return written, states, err
+		}
+	} else {
+		checksums = make(map[string][]byte)
+
+		for alg, h := range hashes {
+			checksums[alg] = h.Sum(nil)
+		}
+
+		return written, checksums, nil
+	}
+}
+
+// Checksums returns the checksums of given hash algorithms by reading r.
+// ctx: [context.Context].
+// It returns states of the hashes instead of checksums
+// if the context is canceled or the deadline expires.
+// Users can call [States] to get an option and pass it to the next call of [ChecksumsBuffer],
+// to resume previous calculation.
+// r: read the bytes from r and calculate the hash checksums.
+// total: total size of r. It's used to report the progress.
+// Set it to -1 if its total size is unknown.
+// options: [Option] used to resume previous calculation or report progress.
+func Checksums(ctx context.Context, r io.Reader, total int64, options ...Option) (written int64, checksums map[string][]byte, err error) {
+	return ChecksumsBuffer(ctx, r, total, nil, options...)
+}
+
+/*
+func ChecksumsOfFile(filename string, options ...Option) (checksums map[string]string, err error) {
+
+}
+
+func ChecksumsOfURL(url string, options ...Option) (checksums map[string]string, err error) {
+
+}
+*/
