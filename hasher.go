@@ -12,6 +12,7 @@ import (
 	"hash/crc32"
 	"io"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/northbright/iocopy"
@@ -594,6 +595,10 @@ func ChecksumsBuffer(ctx context.Context, r io.Reader, total int64, buf []byte, 
 
 	// Create hash.Hash by algorithm
 	for _, alg := range c.algs {
+		// Use upper case letters for algorithm.
+		alg = strings.ToUpper(alg)
+
+		// Get new function for the algorithm.
 		f, ok := hashAlgsToNewFuncs[alg]
 		if !ok {
 			return 0, nil, ErrUnSupportedHashAlg
