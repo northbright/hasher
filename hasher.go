@@ -11,6 +11,7 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -607,7 +608,7 @@ func ChecksumsBuffer(ctx context.Context, r io.Reader, total int64, buf []byte, 
 		hashes[alg] = f()
 
 		// Resume previous calculation by loading binary states.
-		if c.hashed > 0 {
+		if c.hashed > 0 && len(c.states) > 0 {
 			state, ok := c.states[alg]
 			if !ok {
 				return 0, nil, ErrNoStateFound
@@ -711,12 +712,38 @@ func Checksums(ctx context.Context, r io.Reader, total int64, options ...Option)
 	return ChecksumsBuffer(ctx, r, total, nil, options...)
 }
 
-/*
-func ChecksumsOfFile(filename string, options ...Option) (checksums map[string]string, err error) {
+func FileChecksums(ctx context.Context, filename string, options ...Option) (written int64, checksums map[string][]byte, err error) {
+	// Set options.
+	c := &calculator{}
+	for _, option := range options {
+		option(c)
+	}
 
+	f, err := os.Open(filename)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	total := fi.Size()
+
+	// Resume previous calculation by setting file offset.
+	if c.hashed > 0 && len(c.states) > 0 {
+		if _, err = f.Seek(c.hashed, io.SeekStart); err != nil {
+			return 0, nil, err
+		}
+	}
+
+	return Checksums(ctx, f, total, options...)
 }
 
-func ChecksumsOfURL(url string, options ...Option) (checksums map[string]string, err error) {
+/*
+func ChecksumsOfURL(url string, options ...Option)  (written int64, checksums map[string][]byte, err error) {
 
 }
 */
