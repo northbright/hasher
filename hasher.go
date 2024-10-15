@@ -712,7 +712,16 @@ func Checksums(ctx context.Context, r io.Reader, total int64, options ...Option)
 	return ChecksumsBuffer(ctx, r, total, nil, options...)
 }
 
-func FileChecksums(ctx context.Context, filename string, options ...Option) (written int64, checksums map[string][]byte, err error) {
+// FileChecksumsBuffer reads the file and returns the checksums of given hash algorithms.
+// ctx: [context.Context].
+// It returns states of the hashes instead of checksums
+// if the context is canceled or the deadline expires.
+// Users can call [States] to get an option and pass it to the next call of [ChecksumsBuffer],
+// to resume previous calculation.
+// filename: file to calculate the hash checksums.
+// buf: buffer used for the calculation.
+// options: [Option] used to resume previous calculation or report progress.
+func FileChecksumsBuffer(ctx context.Context, filename string, buf []byte, options ...Option) (written int64, checksums map[string][]byte, err error) {
 	// Set options.
 	c := &calculator{}
 	for _, option := range options {
@@ -739,7 +748,19 @@ func FileChecksums(ctx context.Context, filename string, options ...Option) (wri
 		}
 	}
 
-	return Checksums(ctx, f, total, options...)
+	return ChecksumsBuffer(ctx, f, total, buf, options...)
+}
+
+// FileChecksums reads the file and returns the checksums of given hash algorithms.
+// ctx: [context.Context].
+// It returns states of the hashes instead of checksums
+// if the context is canceled or the deadline expires.
+// Users can call [States] to get an option and pass it to the next call of [ChecksumsBuffer],
+// to resume previous calculation.
+// filename: file to calculate the hash checksums.
+// options: [Option] used to resume previous calculation or report progress.
+func FileChecksums(ctx context.Context, filename string, options ...Option) (written int64, checksums map[string][]byte, err error) {
+	return FileChecksumsBuffer(ctx, filename, nil, options...)
 }
 
 /*
