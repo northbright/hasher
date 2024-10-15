@@ -699,7 +699,7 @@ func ExampleChecksums() {
 		resp.Body,
 		// Total Size.
 		size,
-		// States to resume previous calculation.
+		// Option to set states to resume previous calculation.
 		hasher.States(n, states),
 		// Option to set hash algorithms.
 		hasher.Algs([]string{"SHA-256"}),
@@ -798,7 +798,7 @@ func ExampleFileChecksums() {
 		context.Background(),
 		// File name.
 		dst,
-		// States to resume previous calculation.
+		// Option to set states to resume previous calculation.
 		hasher.States(n, states),
 		// Option to set hash algorithms.
 		hasher.Algs([]string{"SHA-256"}),
@@ -818,6 +818,79 @@ func ExampleFileChecksums() {
 		}
 	} else {
 		log.Printf("hasher.FileChecksums() OK")
+		fmt.Printf("%x", checksums["SHA-256"])
+	}
+
+	// Output:
+	// dd9e772686ed908bcff94b6144322d4e2473a7dcd7c696b7e8b6d12f23c887fd
+}
+
+func ExampleURLChecksums() {
+	// This example uses hasher.URLChecksums to compute SHA-256 checksum of remote file.
+	// It uses a timeout context to emulate user cancelation to stop the calculation.
+	// Then it calls hasher.URLChecksums again to resume the calculation.
+
+	// SHA-256: dd9e772686ed908bcff94b6144322d4e2473a7dcd7c696b7e8b6d12f23c887fd
+	url := "https://golang.google.cn/dl/go1.23.1.darwin-amd64.pkg"
+
+	// Use a timeout to emulate user's cancelation.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*800)
+	defer cancel()
+
+	log.Printf("hasher.URLChecksums() starts...\nURL = %v", url)
+	n, states, err := hasher.URLChecksums(
+		// context.Context.
+		ctx,
+		// URL.
+		url,
+		// Option to set hash algorithms.
+		hasher.Algs([]string{"SHA-256"}),
+		// Option to set OnDownloadFunc to report progress.
+		hasher.OnHash(func(total, prev, current int64, percent float32) {
+			log.Printf("%v / %v(%.2f%%) calculated", prev+current, total, percent)
+
+		}),
+	)
+
+	if err != nil {
+		if err != context.Canceled && err != context.DeadlineExceeded {
+			log.Printf("hasher.URLChecksums() error: %v", err)
+			return
+		} else {
+			log.Printf("hasher.URLChecksums() stopped by user, bytes hashed: %v, states: %v\n", n, states)
+		}
+	} else {
+		log.Printf("hasher.URLChecksums() OK")
+		fmt.Printf("%x", states["SHA-256"])
+	}
+
+	// Call hasher.URLChecksums again to resume previous calculation.
+	log.Printf("hasher.URLChecksums() starts again to resume calculation...\nURL = %v", url)
+	n, checksums, err := hasher.URLChecksums(
+		// context.Context.
+		context.Background(),
+		// URL.
+		url,
+		// Option to set states to resume previous calculation.
+		hasher.States(n, states),
+		// Option to set hash algorithms.
+		hasher.Algs([]string{"SHA-256"}),
+		// Option to set OnDownloadFunc to report progress.
+		hasher.OnHash(func(total, prev, current int64, percent float32) {
+			log.Printf("%v / %v(%.2f%%) calculated", prev+current, total, percent)
+
+		}),
+	)
+
+	if err != nil {
+		if err != context.Canceled && err != context.DeadlineExceeded {
+			log.Printf("hasher.URLChecksums() error: %v", err)
+			return
+		} else {
+			log.Printf("hasher.URLChecksums() stopped by user, bytes hashed: %v, states: %v\n", n, states)
+		}
+	} else {
+		log.Printf("hasher.URLChecksums() OK")
 		fmt.Printf("%x", checksums["SHA-256"])
 	}
 

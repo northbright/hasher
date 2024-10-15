@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/northbright/httputil"
 	"github.com/northbright/iocopy"
 	"github.com/northbright/iocopy/progress"
 )
@@ -763,8 +764,63 @@ func FileChecksums(ctx context.Context, filename string, options ...Option) (wri
 	return FileChecksumsBuffer(ctx, filename, nil, options...)
 }
 
-/*
-func ChecksumsOfURL(url string, options ...Option)  (written int64, checksums map[string][]byte, err error) {
+// URLChecksumsBuffer reads the remote file and returns the checksums of given hash algorithms.
+// ctx: [context.Context].
+// It returns states of the hashes instead of checksums
+// if the context is canceled or the deadline expires.
+// Users can call [States] to get an option and pass it to the next call of [ChecksumsBuffer],
+// to resume previous calculation.
+// url: URL of remote file to calculate the hash checksums.
+// buf: buffer used for the calculation.
+// options: [Option] used to resume previous calculation or report progress.
+func URLChecksumsBuffer(ctx context.Context, url string, buf []byte, options ...Option) (written int64, checksums map[string][]byte, err error) {
+	// Set options.
+	c := &calculator{}
+	for _, option := range options {
+		option(c)
+	}
 
+	resp, total, rangeIsSupported, err := httputil.GetResp(url)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+
+	var reader io.Reader = resp.Body
+
+	// Get the HTTP response by range("bytes=start-" syntax) to resume previous calculation.
+	if c.hashed > 0 && len(c.states) > 0 {
+		if rangeIsSupported {
+			resp2, _, err := httputil.GetRespOfRange(
+
+				// URL.
+				url,
+				// Start.
+				c.hashed,
+				// End.
+				-1,
+				// If end is ignored.
+				true,
+			)
+			if err != nil {
+				return 0, nil, err
+			}
+			defer resp2.Body.Close()
+			reader = resp2.Body
+		}
+	}
+
+	return ChecksumsBuffer(ctx, reader, total, buf, options...)
 }
-*/
+
+// URLChecksums reads the remote file and returns the checksums of given hash algorithms.
+// ctx: [context.Context].
+// It returns states of the hashes instead of checksums
+// if the context is canceled or the deadline expires.
+// Users can call [States] to get an option and pass it to the next call of [ChecksumsBuffer],
+// to resume previous calculation.
+// url: URL of remote file to calculate the hash checksums.
+// options: [Option] used to resume previous calculation or report progress.
+func URLChecksums(ctx context.Context, url string, options ...Option) (written int64, checksums map[string][]byte, err error) {
+	return URLChecksumsBuffer(ctx, url, nil, options...)
+}
