@@ -791,16 +791,11 @@ func URLChecksumsBuffer(ctx context.Context, url string, buf []byte, options ...
 	// Get the HTTP response by range("bytes=start-" syntax) to resume previous calculation.
 	if c.hashed > 0 && len(c.states) > 0 {
 		if rangeIsSupported {
-			resp2, _, err := httputil.GetRespOfRange(
-
+			resp2, _, err := httputil.GetRespOfRangeStart(
 				// URL.
 				url,
 				// Start.
 				c.hashed,
-				// End.
-				-1,
-				// If end is ignored.
-				true,
 			)
 			if err != nil {
 				return 0, nil, err
