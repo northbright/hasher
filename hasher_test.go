@@ -234,7 +234,7 @@ func ExampleURLChecksums() {
 	url := "https://golang.google.cn/dl/go1.23.1.darwin-amd64.pkg"
 
 	// Use a timeout to emulate user's cancelation.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*800)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*500)
 	defer cancel()
 
 	log.Printf("hasher.URLChecksums() starts...\nURL = %v", url)
