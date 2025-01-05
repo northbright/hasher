@@ -1,8 +1,2 @@
-github.com/northbright/download v0.0.16 h1:HMWZOx7DXJZmD2fc03e6UH1p2NJ1jPpQNxdKuqSCRLE=
-github.com/northbright/download v0.0.16/go.mod h1:3EPod+LpBbaawSxAQW6yb6sr+tSEgmzpKCxOKbUUp9o=
-github.com/northbright/httputil v1.2.3 h1:KztZGuqqtcC3FL+HprqIaWVOaLOJ7hWraGeyDHs+CYw=
-github.com/northbright/httputil v1.2.3/go.mod h1:ANMNxMzrd1ffD1SDsxtD1COSM2Nyq2Y6iqis8bqdDoU=
-github.com/northbright/iocopy v1.13.7 h1:79OOrDK8E94m01XPYBfk5eaU2RWZahZeKNV7B9lll6g=
-github.com/northbright/iocopy v1.13.7/go.mod h1:xoprDDAKfZm6vDu9HEszIJPxI+287SMfUceyiIVJOaE=
-github.com/northbright/pathelper v1.0.8 h1:1YPXVUpIH8zBlzfd7h/Vtsktf3xrUbrKpYgBAbDU6xc=
-github.com/northbright/pathelper v1.0.8/go.mod h1:LBNv/o8YBdntBXTIWuzdhp+UzLqI4lJoCETHo1QM9Bw=
+github.com/northbright/iocopy v1.16.0 h1:L0Qys3go5VPZRWnL26JoX6ISHtl20uNweBzPYPOXOTI=
+github.com/northbright/iocopy v1.16.0/go.mod h1:D2Wgd7tToKHkWGMjaoQV8KDWtypcs66Je9DSQoRS5Fk=
