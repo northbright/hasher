@@ -1,6 +1,6 @@
 module github.com/northbright/hasher
 
-go 1.23.0
+go 1.24.0
 
 require github.com/northbright/iocopy v1.16.0
 
